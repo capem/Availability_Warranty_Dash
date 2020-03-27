@@ -11,16 +11,12 @@ import dash_html_components as html
 from flask import send_from_directory
 
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
 
 PLOTLY_LOGO = "https://i.ibb.co/3v8qBHx/tarec-warranty.png"
 
-
-
-
 # server = Flask(__name__)
 # app = dash.Dash(server=server, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
@@ -38,25 +34,25 @@ def download(filepath):
 app.config.suppress_callback_exceptions = True
 
 
-PLOTLY_LOGO = app.get_asset_url('tarec_warranty.png')
-arrow = app.get_asset_url('forward_arrow.png')
+PLOTLY_LOGO = app.get_asset_url("tarec_warranty.png")
+arrow = app.get_asset_url("forward_arrow.png")
 
 navbar = dbc.Navbar(
     [
-        html.A(html.Img(src=PLOTLY_LOGO,
-                        style={'height': '6vh',
-                               'boxShadow': '3px 3px 20px -10px blue'}),
-               href='/'),
-        dbc.NavLink("Calculate", href='/apps/app1',
-                    style={'font-size': '150%'}),
-        dbc.NavLink("Adjust", href='/apps/adjust115',
-                    style={'font-size': '150%'}),
-        dbc.NavLink("Results", href='/apps/results',
-                    style={'font-size': '150%'})
+        html.A(
+            html.Img(
+                src=PLOTLY_LOGO,
+                style={"height": "6vh", "boxShadow": "3px 3px 20px -10px blue"},
+            ),
+            href="/",
+        ),
+        dbc.NavLink("Calculate", href="/apps/app1", style={"font-size": "150%"}),
+        dbc.NavLink("Adjust", href="/apps/adjust115", style={"font-size": "150%"}),
+        dbc.NavLink("Results", href="/apps/results", style={"font-size": "150%"}),
     ],
-    color='#eabf1a',
+    color="#eabf1a",
     dark=True,
-    style={'align-content': 'right'}
+    style={"align-content": "right"},
 )
 
-#import index
+# import index
