@@ -1,14 +1,8 @@
 
 import pandas as pd
 
-#from tqdm import tqdm
-# from tqdm import tqdm_notebook as tqdm
-
 import numpy as np
 
-import pandas_access as mdb
-
-from tqdm.auto import tqdm
 import os
 from zipfile import ZipFile
 
@@ -255,7 +249,7 @@ def fill_115_apply(df, period, name, alarms_result_sum):
 
 def fill_115(alarms, period, alarms_result_sum):
 
-    path = 'C:\\Users\\Admin\\Availability Warranty Dash\\monthly_data\\115\\'
+    path = './monthly_data/115/'
 
     # load adjusted 115 alamrs
     if (os.path.isfile(path + f"{period}-115-missing.xlsx")) and (
@@ -393,7 +387,7 @@ def fill_20_apply(df, period, name, alarms_result_sum):
 
 def fill_20(alarms, period, alarms_result_sum):
 
-    path = 'C:\\Users\\Admin\\Availability Warranty Dash\\monthly_data\\20\\'
+    path = './monthly_data/20/'
 
     # load adjusted 20 alamrs
     if (os.path.isfile(path + f"{period}-20-missing.xlsx")) and (
@@ -540,7 +534,7 @@ def full_calculation(period):
 
     # --------------------------error list-------------------------
     error_list = pd.read_excel(
-        r'C:\Users\Admin\Availability Warranty Dash\Error_Type_List_Las_Update_151209.xlsx')
+        r'Error_Type_List_Las_Update_151209.xlsx')
 
     error_list.Number = error_list.Number.astype(int)  # ,errors='ignore'
 
@@ -714,11 +708,19 @@ def full_calculation(period):
     cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - (
         cnt_115_final['ELX'] + cnt_115_final['ELNX'])
 
-    # Ep = cnt_115_final['wtc_kWG1TotE_accum'].sum()
-    # ELX = cnt_115_final['ELX'].sum()
-    # ELNX = cnt_115_final['ELNX'].sum()
+    Ep = cnt_115_final['wtc_kWG1Tot_accum'].sum()
+    ELX = cnt_115_final['ELX'].sum()
+    ELNX = cnt_115_final['ELNX'].sum()
+    Epot = cnt_115_final['Epot'].sum()
+    EL115 = cnt_115_final['EL 115'].sum()
+    EL_indefini = cnt_115_final['EL_indefini'].sum()
 
-    # MAA = (Ep + ELX) / (Ep + ELX + ELNX)
+    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
+
+    MAA_115 = round(100 * (Ep + ELX) / (Ep + EL115), 2)
+
+    print(MAA_result, MAA_115)
 
     print('end')
     return cnt_115_final
+
