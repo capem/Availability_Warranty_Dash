@@ -1,14 +1,8 @@
 
 import pandas as pd
-
-#from tqdm import tqdm
-# from tqdm import tqdm_notebook as tqdm
-
+import multiprocessing as mp
 import numpy as np
 
-import pandas_access as mdb
-
-from tqdm.auto import tqdm
 import os
 from zipfile import ZipFile
 
@@ -106,8 +100,10 @@ def apply_cascade(result_sum):
     return df
 
 
-def upsample(df, period):
-
+def upsample(df_group, period):
+    
+    StationId, df = df_group
+    print('upsmapling')
     df = df[['NewTimeOn', 'TimeOff', 'Period Siemens(s)', 'Period Tarec(s)']]
 
     df[['Period Siemens(s)', 'Period Tarec(s)']] = df[[
@@ -150,6 +146,8 @@ def upsample(df, period):
                                freq='10T')
 
     result = result.reindex(index=full_range, fill_value=0)
+
+    result['StationId'] = StationId
 
     return result
 
@@ -255,7 +253,7 @@ def fill_115_apply(df, period, name, alarms_result_sum):
 
 def fill_115(alarms, period, alarms_result_sum):
 
-    path = 'C:\\Users\\Admin\\Availability Warranty Dash\\monthly_data\\115\\'
+    path = './monthly_data/115/'
 
     # load adjusted 115 alamrs
     if (os.path.isfile(path + f"{period}-115-missing.xlsx")) and (
@@ -393,7 +391,7 @@ def fill_20_apply(df, period, name, alarms_result_sum):
 
 def fill_20(alarms, period, alarms_result_sum):
 
-    path = 'C:\\Users\\Admin\\Availability Warranty Dash\\monthly_data\\20\\'
+    path = './monthly_data/20/'
 
     # load adjusted 20 alamrs
     if (os.path.isfile(path + f"{period}-20-missing.xlsx")) and (
@@ -450,8 +448,9 @@ def fill_20(alarms, period, alarms_result_sum):
     return alarms_20_filled_rows
 
 
-def upsample_115_20(df, period, alarmcode):
+def upsample_115_20(df_group, period, alarmcode):
 
+    StationId , df = df_group
     df = df.loc[:, ['TimeOn']]
 
     clmn_name = f'Duration {alarmcode}(s)'
@@ -481,10 +480,13 @@ def upsample_115_20(df, period, alarmcode):
 
     df = df.reindex(index=full_range, fill_value=0)
 
+    df['StationId'] = StationId
     return df
 
 
-def full_calculation(period):
+if __name__ == '__main__':
+    period = '2020-01'
+# def full_calculation(period):
 
     # ------------------------------grd---------------------------------
     usecols_grd = '''TimeStamp, StationId, wtc_ActPower_min,
@@ -540,7 +542,7 @@ def full_calculation(period):
 
     # --------------------------error list-------------------------
     error_list = pd.read_excel(
-        r'C:\Users\Admin\Availability Warranty Dash\Error_Type_List_Las_Update_151209.xlsx')
+        r'Error_Type_List_Las_Update_151209.xlsx')
 
     error_list.Number = error_list.Number.astype(int)  # ,errors='ignore'
 
@@ -593,13 +595,18 @@ def full_calculation(period):
     print('Cascading done')
 
     # Binning alarms
+
+    pool = mp.Pool(processes=(mp.cpu_count() - 1))
+    
     print('Binning')
-    alarms_binned = alarms_result_sum.groupby(
-        'StationNr').apply(upsample, period=period)
+    grp_lst_args = [(n, period) for n in alarms_result_sum.groupby('StationNr')]
+    
+    alarms_binned = pool.starmap(upsample, grp_lst_args)
+
+    alarms_binned = pd.concat(alarms_binned)
 
     alarms_binned.reset_index(inplace=True)
-    alarms_binned.rename(columns={'StationNr': 'StationId',
-                                  'level_1': 'TimeStamp'}, inplace=True)
+    alarms_binned.rename(columns={'index': 'TimeStamp'}, inplace=True)
 
     print('Alarms Binned')
 
@@ -608,33 +615,36 @@ def full_calculation(period):
     alarms_115_filled = fill_115(alarms, period, alarms_result_sum)
     print('115 filled')
 
-    alarms_115_filled_binned = alarms_115_filled.groupby(
-        'StationNr').apply(upsample_115_20,
-                           period=period,
-                           alarmcode='115')
+    grp_lst_args = [(n, period, '115') for n in alarms_115_filled.groupby('StationNr')]
+    
+    alarms_115_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
+
+    alarms_115_filled_binned = pd.concat(alarms_115_filled_binned)
 
     alarms_115_filled_binned.reset_index(inplace=True)
 
-    alarms_115_filled_binned.rename(columns={'StationNr': 'StationId',
-                                             'level_1': 'TimeStamp'},
+    alarms_115_filled_binned.rename(columns={'index': 'TimeStamp'},
                                     inplace=True)
 
     # -------------------20/25 filling binning --------------------------------
-
+    print('filling 20')    
     alarms_20_filled = fill_20(alarms, period, alarms_result_sum)
+    print('20 filled')
+    grp_lst_args = [(n, period, '20-25') for n in alarms_20_filled.groupby('StationNr')]
+    
+    alarms_20_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
 
-    alarms_20_filled_binned = alarms_20_filled.groupby(
-        'StationNr').apply(upsample_115_20,
-                           period=period, alarmcode='20-25')
+    alarms_20_filled_binned = pd.concat(alarms_20_filled_binned)
 
     alarms_20_filled_binned.reset_index(inplace=True)
 
-    alarms_20_filled_binned.rename(columns={'StationNr': 'StationId',
-                                            'level_1': 'TimeStamp'},
+    alarms_20_filled_binned.rename(columns={'index': 'TimeStamp'},
                                    inplace=True)
-
+    pool.close()
     # -------merging cnt, grd, tur, met,upsampled (alarms ,115 and 20/25)------
     # merging upsampled alarms with energy production
+
+    print('merging upsampled alarms with energy production')
     cnt_alarms = pd.merge(alarms_binned, cnt,
                           on=['TimeStamp', 'StationId'],
                           how='right').reset_index(drop=True)
@@ -714,11 +724,16 @@ def full_calculation(period):
     cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - (
         cnt_115_final['ELX'] + cnt_115_final['ELNX'])
 
-    # Ep = cnt_115_final['wtc_kWG1TotE_accum'].sum()
-    # ELX = cnt_115_final['ELX'].sum()
-    # ELNX = cnt_115_final['ELNX'].sum()
+    Ep = cnt_115_final['wtc_kWG1Tot_accum'].sum()
+    ELX = cnt_115_final['ELX'].sum()
+    ELNX = cnt_115_final['ELNX'].sum()
+    Epot = cnt_115_final['Epot'].sum()
+    EL115 = cnt_115_final['EL 115'].sum()
+    EL_indefini = cnt_115_final['EL_indefini'].sum()
 
-    # MAA = (Ep + ELX) / (Ep + ELX + ELNX)
+    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
 
-    print('end')
-    return cnt_115_final
+    MAA_115 = round(100 * (Ep + ELX) / (Ep + EL115), 2)
+
+    print(MAA_result, MAA_115)
+    # return cnt_115_final
