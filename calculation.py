@@ -486,9 +486,7 @@ def upsample_115_20(df_group, period, alarmcode):
     return df
 
 
-if __name__ == '__main__':
-    period = '2020-01'
-# def full_calculation(period):
+def full_calculation(period):
 
     # ------------------------------grd---------------------------------
     usecols_grd = '''TimeStamp, StationId, wtc_ActPower_min,
@@ -743,4 +741,4 @@ if __name__ == '__main__':
     MAA_115 = round(100 * (Ep + ELX) / (Ep + EL115), 2)
 
     print(MAA_result, MAA_115)
-    # return cnt_115_final
+    return cnt_115_final
