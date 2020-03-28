@@ -1,4 +1,3 @@
-
 import pandas as pd
 import multiprocessing as mp
 import numpy as np
@@ -101,7 +100,7 @@ def apply_cascade(result_sum):
 
 
 def upsample(df_group, period):
-    
+
     StationId, df = df_group
     print('upsmapling')
     df = df[['NewTimeOn', 'TimeOff', 'Period Siemens(s)', 'Period Tarec(s)']]
@@ -450,15 +449,18 @@ def fill_20(alarms, period, alarms_result_sum):
 
 def upsample_115_20(df_group, period, alarmcode):
 
-    StationId , df = df_group
+    print(f'upsampling {alarmcode}')
+    StationId, df = df_group
     df = df.loc[:, ['TimeOn']]
 
     clmn_name = f'Duration {alarmcode}(s)'
-    df.loc[::2, clmn_name] = 1
-    df.loc[1::2, clmn_name] = -1
-
+    df[clmn_name] = 0
+    
     df = df.set_index('TimeOn')
     df = df.sort_index()
+    
+    df.loc[::2, clmn_name] = 1
+    df.loc[1::2, clmn_name] = -1
 
     # precision en miliseconds
     precision = 1000
@@ -597,10 +599,11 @@ if __name__ == '__main__':
     # Binning alarms
 
     pool = mp.Pool(processes=(mp.cpu_count() - 1))
-    
+
     print('Binning')
-    grp_lst_args = [(n, period) for n in alarms_result_sum.groupby('StationNr')]
-    
+    grp_lst_args = iter([(n, period)
+                         for n in alarms_result_sum.groupby('StationNr')])
+
     alarms_binned = pool.starmap(upsample, grp_lst_args)
 
     alarms_binned = pd.concat(alarms_binned)
@@ -611,12 +614,14 @@ if __name__ == '__main__':
     print('Alarms Binned')
 
     # ------------------115 filling binning -----------------------------------
+
     print('filling 115')
     alarms_115_filled = fill_115(alarms, period, alarms_result_sum)
     print('115 filled')
 
-    grp_lst_args = [(n, period, '115') for n in alarms_115_filled.groupby('StationNr')]
-    
+    grp_lst_args = iter([(n, period, '115')
+                         for n in alarms_115_filled.groupby('StationNr')])
+
     alarms_115_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
 
     alarms_115_filled_binned = pd.concat(alarms_115_filled_binned)
@@ -627,11 +632,13 @@ if __name__ == '__main__':
                                     inplace=True)
 
     # -------------------20/25 filling binning --------------------------------
-    print('filling 20')    
+
+    print('filling 20')
     alarms_20_filled = fill_20(alarms, period, alarms_result_sum)
     print('20 filled')
-    grp_lst_args = [(n, period, '20-25') for n in alarms_20_filled.groupby('StationNr')]
-    
+    grp_lst_args = iter([(n, period, '20-25')
+                         for n in alarms_20_filled.groupby('StationNr')])
+
     alarms_20_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
 
     alarms_20_filled_binned = pd.concat(alarms_20_filled_binned)
