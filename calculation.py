@@ -1,15 +1,11 @@
-
-import pandas as pd
-
-import numpy as np
-
-import os
-from zipfile import ZipFile
-
-import pyodbc
-
-from datetime import datetime as dt
 from dateutil.relativedelta import relativedelta
+from datetime import datetime as dt
+import pyodbc
+from zipfile import ZipFile
+import os
+import numpy as np
+import multiprocessing as mp
+import pandas as pd
 
 
 def zip_to_df(data_type, sql, period):
@@ -100,8 +96,10 @@ def apply_cascade(result_sum):
     return df
 
 
-def upsample(df, period):
+def upsample(df_group, period):
 
+    StationId, df = df_group
+    print('upsmapling')
     df = df[['NewTimeOn', 'TimeOff', 'Period Siemens(s)', 'Period Tarec(s)']]
 
     df[['Period Siemens(s)', 'Period Tarec(s)']] = df[[
@@ -144,6 +142,8 @@ def upsample(df, period):
                                freq='10T')
 
     result = result.reindex(index=full_range, fill_value=0)
+
+    result['StationId'] = StationId
 
     return result
 
@@ -444,16 +444,20 @@ def fill_20(alarms, period, alarms_result_sum):
     return alarms_20_filled_rows
 
 
-def upsample_115_20(df, period, alarmcode):
+def upsample_115_20(df_group, period, alarmcode):
 
+    print(f'upsampling {alarmcode}')
+    StationId, df = df_group
     df = df.loc[:, ['TimeOn']]
 
     clmn_name = f'Duration {alarmcode}(s)'
-    df.loc[::2, clmn_name] = 1
-    df.loc[1::2, clmn_name] = -1
+    df[clmn_name] = 0
 
     df = df.set_index('TimeOn')
     df = df.sort_index()
+
+    df.loc[::2, clmn_name] = 1
+    df.loc[1::2, clmn_name] = -1
 
     # precision en miliseconds
     precision = 1000
@@ -475,6 +479,7 @@ def upsample_115_20(df, period, alarmcode):
 
     df = df.reindex(index=full_range, fill_value=0)
 
+    df['StationId'] = StationId
     return df
 
 
@@ -587,48 +592,61 @@ def full_calculation(period):
     print('Cascading done')
 
     # Binning alarms
+
+    pool = mp.Pool(processes=(mp.cpu_count() - 1))
+
     print('Binning')
-    alarms_binned = alarms_result_sum.groupby(
-        'StationNr').apply(upsample, period=period)
+    grp_lst_args = iter([(n, period)
+                         for n in alarms_result_sum.groupby('StationNr')])
+
+    alarms_binned = pool.starmap(upsample, grp_lst_args)
+
+    alarms_binned = pd.concat(alarms_binned)
 
     alarms_binned.reset_index(inplace=True)
-    alarms_binned.rename(columns={'StationNr': 'StationId',
-                                  'level_1': 'TimeStamp'}, inplace=True)
+    alarms_binned.rename(columns={'index': 'TimeStamp'}, inplace=True)
 
     print('Alarms Binned')
 
     # ------------------115 filling binning -----------------------------------
+
     print('filling 115')
     alarms_115_filled = fill_115(alarms, period, alarms_result_sum)
     print('115 filled')
 
-    alarms_115_filled_binned = alarms_115_filled.groupby(
-        'StationNr').apply(upsample_115_20,
-                           period=period,
-                           alarmcode='115')
+    grp_lst_args = iter([(n, period, '115')
+                         for n in alarms_115_filled.groupby('StationNr')])
+
+    alarms_115_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
+
+    alarms_115_filled_binned = pd.concat(alarms_115_filled_binned)
 
     alarms_115_filled_binned.reset_index(inplace=True)
 
-    alarms_115_filled_binned.rename(columns={'StationNr': 'StationId',
-                                             'level_1': 'TimeStamp'},
+    alarms_115_filled_binned.rename(columns={'index': 'TimeStamp'},
                                     inplace=True)
 
     # -------------------20/25 filling binning --------------------------------
 
+    print('filling 20')
     alarms_20_filled = fill_20(alarms, period, alarms_result_sum)
+    print('20 filled')
+    grp_lst_args = iter([(n, period, '20-25')
+                         for n in alarms_20_filled.groupby('StationNr')])
 
-    alarms_20_filled_binned = alarms_20_filled.groupby(
-        'StationNr').apply(upsample_115_20,
-                           period=period, alarmcode='20-25')
+    alarms_20_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
+
+    alarms_20_filled_binned = pd.concat(alarms_20_filled_binned)
 
     alarms_20_filled_binned.reset_index(inplace=True)
 
-    alarms_20_filled_binned.rename(columns={'StationNr': 'StationId',
-                                            'level_1': 'TimeStamp'},
+    alarms_20_filled_binned.rename(columns={'index': 'TimeStamp'},
                                    inplace=True)
-
+    pool.close()
     # -------merging cnt, grd, tur, met,upsampled (alarms ,115 and 20/25)------
     # merging upsampled alarms with energy production
+
+    print('merging upsampled alarms with energy production')
     cnt_alarms = pd.merge(alarms_binned, cnt,
                           on=['TimeStamp', 'StationId'],
                           how='right').reset_index(drop=True)
@@ -720,7 +738,4 @@ def full_calculation(period):
     MAA_115 = round(100 * (Ep + ELX) / (Ep + EL115), 2)
 
     print(MAA_result, MAA_115)
-
-    print('end')
     return cnt_115_final
-
