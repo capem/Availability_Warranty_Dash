@@ -23,7 +23,7 @@ import calculation as calculation
 #    # try 'filesystem' if you don't want to setup redis
 #    'CACHE_TYPE': 'redis',
 #    'CACHE_REDIS_URL': os.environ.get('REDIS_URL', '')
-#})
+# })
 
 directories = [a for a in os.listdir('./monthly_data/uploads/')]
 
@@ -200,18 +200,8 @@ def callback_calcul(x):
     if x is None:
         raise PreventUpdate
 
-    df = calculation.full_calculation(period=x)
+    calculation.full_calculation(period=x).to_csv(
+        f'./monthly_data/results/{x}-Availability-Results.csv')
 
-    Ep = df['wtc_kWG1TotE_accum'].sum()
-    ELX = df['ELX'].sum()
-    ELNX = df['ELNX'].sum()
-    EL115 = df['EL 115'].sum()
-
-    df.to_csv(f'./monthly_data/results/{x}-Availability-Results.csv')
-    df = pd.DataFrame()
-    MAA = round(100 * ((Ep + ELX) / (Ep + ELX + ELNX)), 2)
-    MAA115 = round(100 * ((Ep + ELX) / (Ep + EL115)), 2)
-
-    return [html.P(f'MAA = {MAA}% | MAA 115 = {MAA115} '),
-            dbc.NavLink("Go To Detailed Results",
+    return [dbc.NavLink("Go To Results",
                         href='/apps/results',)]

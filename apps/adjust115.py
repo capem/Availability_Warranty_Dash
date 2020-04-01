@@ -5,7 +5,6 @@ from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from dash.dash import no_update
 
-import pandas as pd
 import os
 from urllib.parse import quote as urlquote
 import base64
@@ -13,7 +12,6 @@ from datetime import datetime as dt
 
 from app import navbar as navbar
 from app import app
-import calculation as calculation
 
 
 def directories_adjust():
@@ -72,8 +70,8 @@ layout = html.Div([
             dbc.Button('Submit/Upload',
                        id='new-submit-button', n_clicks=0),
             dbc.Tooltip(
-                "Please upload files after adjustment,"
-                "And recalculate Availability",
+                "Please upload files after adjustment, "
+                "And return to recalculate Availability",
                 target="new-submit-button"),
 
             dcc.Loading(
@@ -114,7 +112,7 @@ def file_download(path, filename):
     [Output('download_btn_115', 'href'),
      Output('download_btn_20', 'href')],
     [Input('month_selection_adjust', 'value')])
-#@cache.memoize(timeout=60)
+# @cache.memoize(timeout=60)
 def callback_download_adjust(x):
 
     if x is None:

@@ -251,7 +251,7 @@ def fill_115(alarms, period, alarms_result_sum):
 
     path = './monthly_data/115/'
 
-    # load adjusted 115 alamrs
+    # load adjusted 115 alamrs if already filled and adjusted
     if (os.path.isfile(path + f"{period}-115-missing.xlsx")) and (
             os.path.isfile(path + f"{period}-115.xlsx")):
 
@@ -270,7 +270,7 @@ def fill_115(alarms, period, alarms_result_sum):
             sort=False).sort_values(
                 ['StationNr', 'TimeOn']).reset_index(drop=True)
 
-    # fill 115 alarms
+    # fill 115 alarms if alarms not adjusted
     else:
         alarms_115 = alarms[alarms.Alarmcode == 115].copy()
 
@@ -483,59 +483,118 @@ def upsample_115_20(df_group, period, alarmcode):
     return df
 
 
-def full_calculation(period):
+class read_files():
 
     # ------------------------------grd---------------------------------
-    usecols_grd = '''TimeStamp, StationId, wtc_ActPower_min,
-        wtc_ActPower_max, wtc_ActPower_mean'''
+    @staticmethod
+    def read_grd(period):
+        usecols_grd = '''TimeStamp, StationId, wtc_ActPower_min,
+            wtc_ActPower_max, wtc_ActPower_mean'''
 
-    sql_grd = f"Select {usecols_grd} FROM tblSCTurGrid;"
+        sql_grd = f"Select {usecols_grd} FROM tblSCTurGrid;"
 
-    grd = zip_to_df(data_type='grd', sql=sql_grd, period=period)
-    grd['TimeStamp'] = pd.to_datetime(
-        grd['TimeStamp'], format='%m/%d/%y %H:%M:%S')
+        grd = zip_to_df(data_type='grd', sql=sql_grd, period=period)
+        grd['TimeStamp'] = pd.to_datetime(
+            grd['TimeStamp'], format='%m/%d/%y %H:%M:%S')
 
-    grd.iloc[:, 2:] = grd.astype(float, errors='ignore')
+        grd.iloc[:, 2:] = grd.astype(float, errors='ignore')
+
+        return grd
+
     # ------------------------------cnt-------------------------------------
-    usecols_cnt = 'TimeStamp, StationId, wtc_kWG1Tot_accum, wtc_kWG1TotE_accum'
+    @staticmethod
+    def read_cnt(period):
+        usecols_cnt = 'TimeStamp, StationId, wtc_kWG1Tot_accum, wtc_kWG1TotE_accum'
 
-    sql_cnt = f"Select {usecols_cnt} FROM tblSCTurCount;"
+        sql_cnt = f"Select {usecols_cnt} FROM tblSCTurCount;"
 
-    cnt = zip_to_df(data_type='cnt', sql=sql_cnt, period=period)
+        cnt = zip_to_df(data_type='cnt', sql=sql_cnt, period=period)
 
-    cnt['TimeStamp'] = pd.to_datetime(
-        cnt['TimeStamp'], format='%m/%d/%y %H:%M:%S')
+        cnt['TimeStamp'] = pd.to_datetime(
+            cnt['TimeStamp'], format='%m/%d/%y %H:%M:%S')
+
+        return cnt
 
     # -----------------------------sum---------------------------
-    usecols_sum = """
-    SELECT CDbl(TimeOn) AS TOn, CDbl(TimeOff) AS TOff,
-    StationNr, Alarmcode, ID, Parameter
-    FROM tblAlarmLog WHERE TimeOff IS NOT NULL
-    union
-    SELECT CDbl(TimeOn) AS TOn, TimeOff AS TOff,
-    StationNr, Alarmcode, ID, Parameter
-    FROM tblAlarmLog WHERE TimeOff IS NULL
-    """
-    alarms = zip_to_df('sum', usecols_sum, period)
+    @staticmethod
+    def read_sum(period):
+        usecols_sum = """
+        SELECT CDbl(TimeOn) AS TOn, CDbl(TimeOff) AS TOff,
+        StationNr, Alarmcode, ID, Parameter
+        FROM tblAlarmLog WHERE TimeOff IS NOT NULL
+        union
+        SELECT CDbl(TimeOn) AS TOn, TimeOff AS TOff,
+        StationNr, Alarmcode, ID, Parameter
+        FROM tblAlarmLog WHERE TimeOff IS NULL
+        """
+        alarms = zip_to_df('sum', usecols_sum, period)
 
-    alarms['TOn'] = sqldate_to_datetime(alarms['TOn'])
-    alarms['TOff'] = sqldate_to_datetime(alarms['TOff'])
+        alarms['TOn'] = sqldate_to_datetime(alarms['TOn'])
+        alarms['TOff'] = sqldate_to_datetime(alarms['TOff'])
 
-    alarms.rename(columns={'TOn': 'TimeOn', 'TOff': 'TimeOff'}, inplace=True)
+        alarms.rename(columns={'TOn': 'TimeOn',
+                               'TOff': 'TimeOff'}, inplace=True)
 
-    alarms = alarms[alarms.StationNr >= 2307405]
+        alarms = alarms[alarms.StationNr >= 2307405]
 
-    alarms = alarms[
-        alarms.StationNr <= 2307535].reset_index(
-        drop=True)
+        alarms = alarms[
+            alarms.StationNr <= 2307535].reset_index(
+            drop=True)
 
-    print('Alarms Loaded')
+        print('Alarms Loaded')
 
-    alarms.dropna(subset=['Alarmcode'], inplace=True)
+        alarms.dropna(subset=['Alarmcode'], inplace=True)
 
-    alarms.reset_index(drop=True, inplace=True)
+        alarms.reset_index(drop=True, inplace=True)
 
-    alarms.Alarmcode = alarms.Alarmcode.astype(int)
+        alarms.Alarmcode = alarms.Alarmcode.astype(int)
+
+        return alarms
+
+    # ------------------------------tur---------------------------
+    @staticmethod
+    def read_tur(period):
+        usecols_tur = '''TimeStamp, StationId, wtc_AcWindSp_mean, wtc_AcWindSp_stddev,
+        wtc_ActualWindDirection_mean, wtc_ActualWindDirection_stddev'''
+
+        sql_tur = f"Select {usecols_tur} FROM tblSCTurbine;"
+
+        tur = zip_to_df('tur', sql_tur, period)
+
+        return tur
+
+    # ------------------------------met---------------------------
+    @staticmethod
+    def read_met(period):
+
+        usecols_met = '''TimeStamp, StationId ,met_WindSpeedRot_mean,
+        met_WinddirectionRot_mean'''
+
+        sql_met = f"Select {usecols_met} FROM tblSCMet;"
+
+        met = zip_to_df('met', sql_met, period)
+
+        met = met.pivot('TimeStamp', 'StationId', [
+                        'met_WindSpeedRot_mean', 'met_WinddirectionRot_mean'])
+
+        met.columns = met.columns.to_flat_index()
+
+        met.reset_index(inplace=True)
+
+        return met
+
+    @staticmethod
+    def read_all(period):
+
+        return (read_files.read_met(period), read_files.read_tur(period),
+                read_files.read_sum(period), read_files.read_cnt(period),
+                read_files.read_grd(period))
+
+
+def full_calculation(period):
+
+    # reading all files with function
+    met, tur, alarms, cnt, grd = read_files.read_all(period)
 
     # --------------------------error list-------------------------
     error_list = pd.read_excel(
@@ -546,30 +605,6 @@ def full_calculation(period):
     error_list.drop_duplicates(subset=['Number'], inplace=True)
 
     error_list.rename(columns={'Number': 'Alarmcode'}, inplace=True)
-
-    # ------------------------------tur---------------------------
-    usecols_tur = '''TimeStamp, StationId, wtc_AcWindSp_mean, wtc_AcWindSp_stddev,
-    wtc_ActualWindDirection_mean, wtc_ActualWindDirection_stddev'''
-
-    sql_tur = f"Select {usecols_tur} FROM tblSCTurbine;"
-
-    tur = zip_to_df('tur', sql_tur, period)
-
-    # ------------------------------met---------------------------
-
-    usecols_met = '''TimeStamp, StationId ,met_WindSpeedRot_mean,
-     met_WinddirectionRot_mean'''
-
-    sql_met = f"Select {usecols_met} FROM tblSCMet;"
-
-    met = zip_to_df('met', sql_met, period)
-
-    met = met.pivot('TimeStamp', 'StationId', [
-                    'met_WindSpeedRot_mean', 'met_WinddirectionRot_mean'])
-
-    met.columns = met.columns.to_flat_index()
-
-    met.reset_index(inplace=True)
 
     # ------------------------------------------------------
 
