@@ -1,4 +1,7 @@
-monthly_data/
 calculation_parallelizing.ipynb
 .ipynb_checkpoints/calculation_parallelizing-checkpoint.ipynb
 .vscode/
+# exclude everything in every folder
+/monthly_data/**/*.*
+# include only .gitkeep files
+!/monthly_data/**/*.gitkeep
