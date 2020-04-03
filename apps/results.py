@@ -22,12 +22,13 @@ from dash.dash import no_update
 #    # try 'filesystem' if you don't want to setup redis
 #    'CACHE_TYPE': 'redis',
 #    'CACHE_REDIS_URL': os.environ.get('REDIS_URL', '')
-#})
+# })
 
 
 def directories_results():
 
-    directories_results = [a for a in os.listdir('./monthly_data/results/')]
+    directories_results = [a for a in os.listdir(
+        './monthly_data/results/') if a != '.gitkeep']
     return([{'label': i, 'value': i} for i in directories_results])
 
 
@@ -43,7 +44,7 @@ tab1_content = dbc.Card(
             html.P(id='ELNX', className="card-text"),
             html.P(id='EL_indefni', className="card-text"),
             html.P(id='Epot', className="card-text"),
-            #dbc.Button("Don't click here", color="danger"),
+            # dbc.Button("Don't click here", color="danger"),
 
         ]
     ),
@@ -55,7 +56,7 @@ tab2_content = dbc.Card(
         [html.P(id='Total_duration', className="card-text"),
             html.P(id='Siemens_duration', className="card-text"),
             html.P(id='Tarec_duration', className="card-text"),
-            #dbc.Button("Click here", color="success"),
+            # dbc.Button("Click here", color="success"),
          ]
     ),
     className="mt-3", style=tab_style
@@ -106,7 +107,7 @@ layout = html.Div([
 def update_dropdown(x):
     path = './monthly_data/results/'
     directories_results = [a for a in os.listdir(
-        path) if os.path.isfile(os.path.join(path, a))]
+        path) if (os.path.isfile(os.path.join(path, a)) and a != '.gitkeep')]
     return([{'label': i[:-4], 'value': i} for i in directories_results])
 
 
@@ -125,7 +126,7 @@ def update_dropdown(x):
      Output('download_grouped', 'href'),
      Output('table', 'children')],
     [Input('month_selection_dropdown', 'value')])
-#@cache.memoize(timeout=60)
+# @cache.memoize(timeout=60)
 def callback_a(x):
 
     if x is None:

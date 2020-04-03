@@ -25,7 +25,8 @@ import calculation as calculation
 #    'CACHE_REDIS_URL': os.environ.get('REDIS_URL', '')
 # })
 
-directories = [a for a in os.listdir('./monthly_data/uploads/')]
+directories = [a for a in os.listdir(
+    './monthly_data/uploads/') if a != '.gitkeep']
 
 
 column_style = {'height': '100%', 'flex-direction': 'column',
@@ -180,7 +181,9 @@ def update_output(clicks, date, filenames, file_contents):
             save_file(filenames, file_contents)
 
         files = uploaded_files()
-        directories = [a for a in os.listdir('./monthly_data/uploads/')]
+
+        directories = [a for a in os.listdir(
+            './monthly_data/uploads/') if a != '.gitkeep']
 
         if len(files) == 0:
             return ([html.Li("No files yet!")],

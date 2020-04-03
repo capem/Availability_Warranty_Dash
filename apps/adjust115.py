@@ -16,10 +16,14 @@ from app import app
 
 def directories_adjust():
 
-    files_115 = [a[:7] for a in os.listdir('./monthly_data/115/')]
-    files_20 = [a[:7] for a in os.listdir('./monthly_data/20/')]
+    files_115 = [a[:7] for a in os.listdir(
+        './monthly_data/115/') if a != '.gitkeep']
+
+    files_20 = [a[:7] for a in os.listdir(
+        './monthly_data/20/') if a != '.gitkeep']
 
     directories_adjust = {a for a in files_115 if a in files_20}
+
     return([{'label': i, 'value': i} for i in directories_adjust])
 
 
