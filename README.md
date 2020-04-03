@@ -3,8 +3,7 @@
 ## Getting Started
 -  Download this project and extract in desired location.
 
-- Download [python](https://www.anaconda.com/distribution/#download-section) version 3 from Anaconda website 
-
+- Download [miniconda](https://docs.conda.io/en/latest/miniconda.html) with python version 3.7 from Anaconda website.
 
 - Open anaconda prompt in windows start menu and run these commands.
 
