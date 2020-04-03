@@ -34,7 +34,7 @@ column_style = {'height': '100%', 'flex-direction': 'column',
                 'justify-content': 'center',
                 'boxShadow': '3px 3px 20px -10px #eabf1a',
                 'marginLeft': '10%', 'marginRight': '10%',
-                'marginBottom': '1%', 'marginTop': '10%'}
+                'marginBottom': '1%', 'marginTop': '8%'}
 
 
 layout = html.Div([
@@ -89,7 +89,7 @@ layout = html.Div([
                  ], style=column_style)
 
     ],
-        style={'height': '50%', 'display': 'flex', 'align-items': 'center',
+        style={'height': '60%', 'display': 'flex', 'align-items': 'center',
                'justify-content': 'center'},
         no_gutters=True)
 ], style={'height': '100vh'})
@@ -204,8 +204,22 @@ def callback_calcul(x):
     if x is None:
         raise PreventUpdate
 
-    calculation.full_calculation(period=x).to_csv(
-        f'./monthly_data/results/{x}-Availability-Results.csv')
+    Results = calculation.full_calculation(period=x)
+    Results.to_csv(
+        f'./monthly_data/results/{x}-Availability.csv',
+        decimal=',', sep=';')
+
+    Results = Results[['StationId', 'wtc_kWG1Tot_accum', 'Epot',
+                       'ELX', 'ELNX', 'EL 115', 'EL 20-25', 'EL_indefini',
+                       'Period 1(s)', 'Period 0(s)', 'Duration 115(s)',
+                       'Duration 20-25(s)']]
+
+    Results_grouped = round(
+        Results.groupby('StationId').sum().reset_index(), 2)
+
+    Results_grouped.to_csv(
+        f"./monthly_data/results/Grouped_Results/grouped_{x}-Availability.csv",
+        decimal=',', sep=';')
 
     return [dbc.NavLink("Go To Results",
                         href='/apps/results',)]

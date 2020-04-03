@@ -99,7 +99,6 @@ def apply_cascade(result_sum):
 def upsample(df_group, period):
 
     StationId, df = df_group
-    print('upsmapling')
     df = df[['NewTimeOn', 'TimeOff', 'Period Siemens(s)', 'Period Tarec(s)']]
 
     df[['Period Siemens(s)', 'Period Tarec(s)']] = df[[
@@ -446,7 +445,6 @@ def fill_20(alarms, period, alarms_result_sum):
 
 def upsample_115_20(df_group, period, alarmcode):
 
-    print(f'upsampling {alarmcode}')
     StationId, df = df_group
     df = df.loc[:, ['TimeOn']]
 
@@ -649,6 +647,7 @@ def full_calculation(period):
     alarms_115_filled = fill_115(alarms, period, alarms_result_sum)
     print('115 filled')
 
+    print(f'upsampling 115')
     grp_lst_args = iter([(n, period, '115')
                          for n in alarms_115_filled.groupby('StationNr')])
 
@@ -669,6 +668,7 @@ def full_calculation(period):
     grp_lst_args = iter([(n, period, '20-25')
                          for n in alarms_20_filled.groupby('StationNr')])
 
+    print(f'upsampling 20-25')
     alarms_20_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
 
     alarms_20_filled_binned = pd.concat(alarms_20_filled_binned)
@@ -757,6 +757,9 @@ def full_calculation(period):
 
     cnt_115_final['EL 115'] = ((cnt_115_final['Duration 115(s)']) / 600) * (
         cnt_115_final['EL'])
+
+    cnt_115_final['EL 20-25'] = ((cnt_115_final['Duration 20-25(s)']
+                                  ) / 600) * (cnt_115_final['EL'])
 
     cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - (
         cnt_115_final['ELX'] + cnt_115_final['ELNX'])

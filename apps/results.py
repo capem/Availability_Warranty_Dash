@@ -108,7 +108,7 @@ def update_dropdown(x):
     path = './monthly_data/results/'
     directories_results = [a for a in os.listdir(
         path) if (os.path.isfile(os.path.join(path, a)) and a != '.gitkeep')]
-    return([{'label': i[:-4], 'value': i} for i in directories_results])
+    return([{'label': i[:-4], 'value': i[:-4]} for i in directories_results])
 
 
 @app.callback(
@@ -133,20 +133,11 @@ def callback_a(x):
         return tuple(None for i in range(13))
 
     Results = pd.read_csv(
-        f'./monthly_data/results/{x}',
-        usecols=['StationId', 'wtc_kWG1Tot_accum', 'Epot',
-                 'ELX', 'ELNX', 'EL_indefini',
-                 'EL 115', 'Duration 115(s)',
-                 'Period 1(s)', 'Period 0(s)'])
-
-    Results_grouped = round(
-        Results.groupby('StationId').sum().reset_index(), 2)
-
-    Results_grouped.to_csv(
-        f"./monthly_data/results/Grouped_Results/grouped_{x}")
-
+        f"./monthly_data/results/Grouped_Results/grouped_{x}.csv",
+        decimal=',', sep=';')
+    
     location_grouped = (f"/download/results/Grouped_Results/"
-                        f"grouped_{urlquote(x)}")
+                        f"grouped_{urlquote(x)}.csv")
 
     Ep = Results['wtc_kWG1Tot_accum'].sum()
     ELX = Results['ELX'].sum()
@@ -163,8 +154,6 @@ def callback_a(x):
     Tarec_duration = Results['Period 0(s)'].sum() / 3600
     Total_duration = Siemens_duration + Tarec_duration
 
-    print(f'/download/results/{urlquote(x)}')
-
     year = int(x[:4])
     month = int(x[5:7])
 
@@ -174,8 +163,8 @@ def callback_a(x):
     location = f"/download/{urlquote('results')}/{urlquote(x)}"
 
     table = dash_table.DataTable(
-        columns=[{"name": i, "id": i} for i in Results_grouped.columns],
-        data=Results_grouped.to_dict('records'))
+        columns=[{"name": i, "id": i} for i in Results.columns],
+        data=Results.to_dict('records'))
 
     return (f'Total duration: {round(Total_duration, 2)} Hour | \
                 {round(100*Total_duration/(24*days*131),2)}%',
