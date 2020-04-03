@@ -44,9 +44,10 @@ layout = html.Div([
     dbc.Row([
         dbc.Col([dbc.Button('Submit/Upload', id='submit-button', n_clicks=0),
                  dbc.Tooltip(
-                     "Files To Upload, \n"
-                     "year-month-cnt.zip, year-month-grd.zip,"
-                     " year-month-sum.zip",
+                     "Files To Upload,"
+                     "y-m-cnt.zip, y-m-grd.zip,"
+                     "y-m-sum.zip, y-m-met.zip,"
+                     "y-m-tur.zip",
                      target="submit-button"),
 
                  dcc.DatePickerSingle(
