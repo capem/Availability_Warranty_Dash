@@ -42,7 +42,7 @@ tab1_content = dbc.Card(
             html.P(id='EL115', className="card-text"),
             html.P(id='ELX', className="card-text"),
             html.P(id='ELNX', className="card-text"),
-            html.P(id='EL_indefni', className="card-text"),
+            html.P(id='EL_indefini', className="card-text"),
             html.P(id='Epot', className="card-text"),
             # dbc.Button("Don't click here", color="danger"),
 
@@ -135,9 +135,6 @@ def callback_a(x):
     Results = pd.read_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{x}.csv",
         decimal=',', sep=';')
-    
-    location_grouped = (f"/download/results/Grouped_Results/"
-                        f"grouped_{urlquote(x)}.csv")
 
     Ep = Results['wtc_kWG1Tot_accum'].sum()
     ELX = Results['ELX'].sum()
@@ -160,7 +157,10 @@ def callback_a(x):
     days = monthrange(year, month)[1]
 
     # location = f"/download/{urlquote('results')}/anaconda.exe"
-    location = f"/download/{urlquote('results')}/{urlquote(x)}"
+    location = f"/download/results/{urlquote(x)}.csv"
+
+    location_grouped = (f"/download/results/Grouped_Results/"
+                        f"grouped_{urlquote(x)}.csv")
 
     table = dash_table.DataTable(
         columns=[{"name": i, "id": i} for i in Results.columns],

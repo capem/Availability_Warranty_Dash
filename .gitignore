@@ -5,3 +5,4 @@ calculation_parallelizing.ipynb
 /monthly_data/**/*.*
 # include only .gitkeep files
 !/monthly_data/**/*.gitkeep
+__pycache__/
