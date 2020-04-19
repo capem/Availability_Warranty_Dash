@@ -209,13 +209,29 @@ def callback_calcul(x):
         f'./monthly_data/results/{x}-Availability.csv',
         decimal=',', sep=';')
 
-    Results = Results[['StationId', 'wtc_kWG1Tot_accum', 'Epot',
+    Results = Results[['StationId', 'wtc_kWG1TotE_accum', 'Epot',
                        'ELX', 'ELNX', 'EL 115', 'EL 20-25', 'EL_indefini',
                        'Period 1(s)', 'Period 0(s)', 'Duration 115(s)',
                        'Duration 20-25(s)']]
 
     Results_grouped = round(
         Results.groupby('StationId').sum().reset_index(), 2)
+
+    Ep = Results_grouped['wtc_kWG1TotE_accum']
+    ELX = Results_grouped['ELX']
+    ELNX = Results_grouped['ELNX']
+    EL_indefini = Results_grouped['EL_indefini']
+    Epot = Results_grouped['Epot']
+
+    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
+
+    MAA_indefini = round(100 * (Ep + ELX) / (Epot), 2)
+
+    Results_grouped['MAA'] = MAA_result
+
+    Results_grouped['MAA_indefini'] = MAA_indefini
+
+    Results_grouped.index = Results_grouped.index + 1
 
     Results_grouped.to_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{x}-Availability.csv",

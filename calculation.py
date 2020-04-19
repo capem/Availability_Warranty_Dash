@@ -122,7 +122,7 @@ def upsample(df_group, period):
     result = result.sort_index()
 
     # precision en miliseconds
-    precision = 10000
+    precision = 1000
 
     result = result.resample(f'{precision}ms', label='right').sum().cumsum()
 
@@ -714,7 +714,7 @@ def full_calculation(period):
                        on='TimeStamp')
 
     # -------- operational turbines mask --------------------------------------
-    mask_n = ((cnt_115['wtc_kWG1Tot_accum'] > 0) & (
+    mask_n = ((cnt_115['wtc_kWG1TotE_accum'] > 0) & (
         cnt_115['Period 0(s)'] == 0) & (
         cnt_115['Period 1(s)'] == 0) & (
         cnt_115['wtc_ActPower_min'] > 0) & (
@@ -726,10 +726,10 @@ def full_calculation(period):
     cnt_115_n = cnt_115.loc[mask_n].copy()
 
     Epot = cnt_115_n.groupby(
-        ['TimeStamp']).agg({'wtc_kWG1Tot_accum': ep_cf}).rename(
-            columns={'wtc_kWG1Tot_accum': 'Epot'})
+        ['TimeStamp']).agg({'wtc_kWG1TotE_accum': ep_cf}).rename(
+            columns={'wtc_kWG1TotE_accum': 'Epot'})
 
-    cnt_115_n['Epot'] = cnt_115_n['wtc_kWG1Tot_accum']
+    cnt_115_n['Epot'] = cnt_115_n['wtc_kWG1TotE_accum']
 
     cnt_115_no = cnt_115.loc[~mask_n].copy()
 
@@ -743,17 +743,19 @@ def full_calculation(period):
         ['StationId', 'TimeStamp']).reset_index(drop=True)
 
     cnt_115_final['EL'] = cnt_115_final['Epot'] - \
-        cnt_115_final['wtc_kWG1Tot_accum']
+        cnt_115_final['wtc_kWG1TotE_accum']
 
     cnt_115_final['EL'] = cnt_115_final['EL'].clip(lower=0)
 
     cnt_115_final = cnt_115_final.fillna(0)
 
-    cnt_115_final['ELX'] = ((cnt_115_final['Period 0(s)']) / 600) * (
-        cnt_115_final['EL'])
+    cnt_115_final['ELX'] = ((cnt_115_final['Period 0(s)'] / (
+        cnt_115_final['Period 0(s)'] + cnt_115_final['Period 1(s)'])) * (
+        cnt_115_final['EL'])).fillna(0)
 
-    cnt_115_final['ELNX'] = ((cnt_115_final['Period 1(s)']) / 600) * (
-        cnt_115_final['EL'])
+    cnt_115_final['ELNX'] = ((cnt_115_final['Period 1(s)'] / (
+        cnt_115_final['Period 0(s)'] + cnt_115_final['Period 1(s)'])) * (
+        cnt_115_final['EL'])).fillna(0)
 
     cnt_115_final['EL 115'] = ((cnt_115_final['Duration 115(s)']) / 600) * (
         cnt_115_final['EL'])
@@ -764,7 +766,19 @@ def full_calculation(period):
     cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - (
         cnt_115_final['ELX'] + cnt_115_final['ELNX'])
 
-    Ep = cnt_115_final['wtc_kWG1Tot_accum'].sum()
+    # if at least 3 of these conditions are true
+    mask = ((
+        cnt_115_final['wtc_AcWindSp_mean'] < 4) & (((
+            cnt_115_final[('met_WindSpeedRot_mean', 246)] < 5) + (
+            cnt_115_final[('met_WindSpeedRot_mean', 38)] < 5) + (
+            cnt_115_final[('met_WindSpeedRot_mean', 39)] < 5)) > 2))
+
+    cnt_115_final.loc[mask, 'ELX'] = (
+        cnt_115_final.loc[mask, 'ELX'] + cnt_115_final.loc[mask, 'EL_indefini'])
+
+    cnt_115_final.loc[mask, 'EL_indefini'] = 0
+
+    Ep = cnt_115_final['wtc_kWG1TotE_accum'].sum()
     ELX = cnt_115_final['ELX'].sum()
     ELNX = cnt_115_final['ELNX'].sum()
     Epot = cnt_115_final['Epot'].sum()

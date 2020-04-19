@@ -38,7 +38,7 @@ tab1_content = dbc.Card(
     dbc.CardBody(
         [
             html.P(id='MAA_result', className="card-text"),
-            html.P(id='wtc_kWG1Tot_accum', className="card-text"),
+            html.P(id='wtc_kWG1TotE_accum', className="card-text"),
             html.P(id='EL115', className="card-text"),
             html.P(id='ELX', className="card-text"),
             html.P(id='ELNX', className="card-text"),
@@ -116,7 +116,7 @@ def update_dropdown(x):
      Output('Siemens_duration', 'children'),
      Output('Tarec_duration', 'children'),
      Output('MAA_result', 'children'),
-     Output('wtc_kWG1Tot_accum', 'children'),
+     Output('wtc_kWG1TotE_accum', 'children'),
      Output('EL115', 'children'),
      Output('ELX', 'children'),
      Output('ELNX', 'children'),
@@ -136,7 +136,7 @@ def callback_a(x):
         f"./monthly_data/results/Grouped_Results/grouped_{x}.csv",
         decimal=',', sep=';')
 
-    Ep = Results['wtc_kWG1Tot_accum'].sum()
+    Ep = Results['wtc_kWG1TotE_accum'].sum()
     ELX = Results['ELX'].sum()
     ELNX = Results['ELNX'].sum()
     Epot = Results['Epot'].sum()
@@ -145,7 +145,7 @@ def callback_a(x):
 
     MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
 
-    MAA_115 = round(100 * (Ep + ELX) / (Ep + EL115), 2)
+    MAA_indefini = round(100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_indefini), 2)
 
     Siemens_duration = Results['Period 1(s)'].sum() / 3600
     Tarec_duration = Results['Period 0(s)'].sum() / 3600
@@ -173,7 +173,7 @@ def callback_a(x):
             f'Tarec duration: {round(Tarec_duration, 2)} Hour | \
                 {round(100*Tarec_duration/(24*days*131), 2)}%',
 
-            f'MAA = {MAA_result}% | MAA_115 = {MAA_115}% |',
+            f'MAA = {MAA_result}% | MAA_indefini = {MAA_indefini}% |',
             f'EL115 = {EL115:,.2f} kWh',
             f'Energy produced: {Ep:,.2f} kWh',
             f'Energy Lost excusable: {ELX:,.2f} kWh',
