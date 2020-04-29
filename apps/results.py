@@ -6,17 +6,17 @@ import dash_table
 
 import pandas as pd
 import os
-import datetime
+# import datetime
 from urllib.parse import quote as urlquote
-from dash.exceptions import PreventUpdate
+# from dash.exceptions import PreventUpdate
 
 from app import navbar
 from app import app
 
 from calendar import monthrange
 
-from flask_caching import Cache
-from dash.dash import no_update
+# from flask_caching import Cache
+# from dash.dash import no_update
 
 # cache = Cache(app.server, config={
 #    # try 'filesystem' if you don't want to setup redis
@@ -140,12 +140,20 @@ def callback_a(x):
     ELX = Results['ELX'].sum()
     ELNX = Results['ELNX'].sum()
     Epot = Results['Epot'].sum()
-    EL115 = Results['EL 115'].sum()
+    EL = Results['EL'].sum()
     EL_indefini = Results['EL_indefini'].sum()
+
+    EL_wind = Results['EL_wind'].sum()
+    EL_wind_start = Results['EL_wind_start'].sum()
+    EL_alarm_start = Results['EL_alarm_start'].sum()
 
     MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
 
-    MAA_indefini = round(100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_indefini), 2)
+    MAA_indefini = round(100 * (Ep + ELX) / (Ep + EL), 2)
+
+    MAA_indefini_adjusted = round(100 * (
+        Ep + ELX) / (
+            Ep + EL - (EL_wind + EL_wind_start + EL_alarm_start)), 2)
 
     Siemens_duration = Results['Period 1(s)'].sum() / 3600
     Tarec_duration = Results['Period 0(s)'].sum() / 3600
@@ -174,7 +182,7 @@ def callback_a(x):
                 {round(100*Tarec_duration/(24*days*131), 2)}%',
 
             f'MAA = {MAA_result}% | MAA_indefini = {MAA_indefini}% |',
-            f'EL115 = {EL115:,.2f} kWh',
+            f'MAA_indefini_adjusted = {MAA_indefini_adjusted}%',
             f'Energy produced: {Ep:,.2f} kWh',
             f'Energy Lost excusable: {ELX:,.2f} kWh',
             f'Energy Lost non-excusable: {ELNX:,.2f} kWh',

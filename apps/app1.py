@@ -4,10 +4,8 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from dash.dash import no_update
-from flask_caching import Cache
+# from flask_caching import Cache
 
-
-import pandas as pd
 import os
 from urllib.parse import quote as urlquote
 import base64
@@ -210,7 +208,9 @@ def callback_calcul(x):
         decimal=',', sep=';')
 
     Results = Results[['StationId', 'wtc_kWG1TotE_accum', 'Epot',
-                       'ELX', 'ELNX', 'EL 115', 'EL 20-25', 'EL_indefini',
+                       'EL', 'EL 115', 'ELX', 'ELNX', 'EL_115_left',
+                       'EL_indefini', 'EL_wind', 'EL_wind_start',
+                       'EL_alarm_start', 'EL_indefini_left',
                        'Period 1(s)', 'Period 0(s)', 'Duration 115(s)',
                        'Duration 20-25(s)']]
 
@@ -218,18 +218,27 @@ def callback_calcul(x):
         Results.groupby('StationId').sum().reset_index(), 2)
 
     Ep = Results_grouped['wtc_kWG1TotE_accum']
+    EL = Results_grouped['EL']
     ELX = Results_grouped['ELX']
     ELNX = Results_grouped['ELNX']
-    EL_indefini = Results_grouped['EL_indefini']
-    Epot = Results_grouped['Epot']
 
-    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
+    EL_wind = Results_grouped['EL_wind']
+    EL_wind_start = Results_grouped['EL_wind_start']
+    EL_alarm_start = Results_grouped['EL_alarm_start']
 
-    MAA_indefini = round(100 * (Ep + ELX) / (Epot), 2)
+    MAA_result = 100 * (Ep + ELX) / (Ep + ELX + ELNX)
+
+    MAA_indefini = 100 * (Ep + ELX) / (Ep + EL)
+
+    MAA_indefni_adjusted = 100 * (
+        Ep + ELX + EL_wind + EL_wind_start + EL_alarm_start) / (
+            Ep + EL)
 
     Results_grouped['MAA'] = MAA_result
 
     Results_grouped['MAA_indefini'] = MAA_indefini
+
+    Results_grouped['MAA_indefni_adjusted'] = MAA_indefni_adjusted
 
     Results_grouped.index = Results_grouped.index + 1
 
