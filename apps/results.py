@@ -132,9 +132,9 @@ def callback_a(x):
     if x is None:
         return tuple(None for i in range(13))
 
-    Results = pd.read_csv(
+    Results = round(pd.read_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{x}.csv",
-        decimal=',', sep=';')
+        decimal=',', sep=';'), 2)
 
     Ep = Results['wtc_kWG1TotE_accum'].sum()
     ELX = Results['ELX'].sum()
