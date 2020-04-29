@@ -124,6 +124,8 @@ def update_output(clicks, date, filenames, file_contents):
         period = year + '-' + month
 
         UPLOAD_DIRECTORY = f"./monthly_data/uploads/{period}/"
+        if not os.path.exists(UPLOAD_DIRECTORY):
+            os.makedirs(UPLOAD_DIRECTORY)
 
         def uploaded_files():
             """List the files in the upload directory."""
