@@ -660,7 +660,7 @@ def full_calculation(period):
     print('Cascading done')
 
     # ----------------openning pool for multiprocessing------------------------
-    pool = mp.Pool(processes=(mp.cpu_count() - 3))
+    pool = mp.Pool(processes=(mp.cpu_count() - 1))
 
     # ------------------115 filling binning -----------------------------------
 
@@ -834,8 +834,11 @@ def full_calculation(period):
     cnt_115_final['EL_115_left'] = cnt_115_final['EL 115'] - (
         cnt_115_final['ELX'] + cnt_115_final['ELNX'])
 
-    cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - (
-        cnt_115_final['EL 115'])
+    max_115_ELX_ELNX = pd.concat(
+        [(cnt_115_final['ELX'] + cnt_115_final['ELNX']),
+         cnt_115_final['EL 115']], axis=1).max(axis=1)
+
+    cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - max_115_ELX_ELNX
     # -------------------------------------------------------------------------
 
     def lowind(cnt_115_final):
@@ -853,9 +856,14 @@ def full_calculation(period):
         cnt_115_final.loc[mask_1,
                           'EL_wind'] = cnt_115_final.loc[
                               mask_1, 'EL_indefini'].fillna(0)
+
+        cnt_115_final.loc[mask_1,
+                          'Duration lowind(s)'] = 600
+
         cnt_115_final.loc[mask_2 & ~mask_1, 'EL_wind_start'] = (
             cnt_115_final.loc[mask_2 & ~mask_1, 'EL_indefini']).fillna(0)
 
+        cnt_115_final.loc[mask_2 & ~mask_1, 'Duration lowind_start(s)'] = 600
         # ---------------------------------------------------------------------
 
         mask_3 = ((
@@ -866,6 +874,9 @@ def full_calculation(period):
         cnt_115_final.loc[~mask_1 & ~mask_2 & mask_3, 'EL_alarm_start'] = (
             cnt_115_final.loc[
                 ~mask_1 & ~mask_2 & mask_3, 'EL_indefini']).fillna(0)
+
+        cnt_115_final.loc[~mask_1 & ~mask_2 & mask_3,
+                          'Duration alarm_start(s)'] = 600
 
         return cnt_115_final
 

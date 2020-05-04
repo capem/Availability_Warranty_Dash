@@ -214,7 +214,8 @@ def callback_calcul(x):
                        'EL_indefini', 'EL_wind', 'EL_wind_start',
                        'EL_alarm_start', 'EL_indefini_left',
                        'Period 1(s)', 'Period 0(s)', 'Duration 115(s)',
-                       'Duration 20-25(s)']]
+                       'Duration 20-25(s)', 'Duration lowind(s)',
+                       'Duration lowind_start(s)', 'Duration alarm_start(s)']]
 
     Results_grouped = round(
         Results.groupby('StationId').sum().reset_index(), 2)
@@ -247,6 +248,7 @@ def callback_calcul(x):
     Results_grouped.to_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{x}-Availability.csv",
         decimal=',', sep=';')
+    print('Done')
 
     return [dbc.NavLink("Go To Results",
                         href='/apps/results',)]
