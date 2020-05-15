@@ -154,6 +154,93 @@ def upsample(df_group, period):
     return result
 
 
+def alarms_to_10min(alarms_df_clean_tur, period, next_period):
+
+    last_df = pd.DataFrame()
+    for i, j in alarms_df_clean_tur.iterrows():
+        full_range = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
+                                   pd.Timestamp(
+                                       f'{next_period}-01 00:00:00.000'),
+                                   freq='10T')
+        df = pd.DataFrame(index=full_range)
+        new_j = pd.DataFrame(j).T
+        df = df.loc[(df.index >= j.NewTimeOn) & (
+            df.index <= (j.TimeOff + pd.Timedelta(minutes=10)))]
+        df = pd.concat([df, new_j]).bfill()
+        df.drop(df.tail(1).index, inplace=True)
+        last_df = pd.concat([last_df, df])
+
+    return last_df[['TimeOn', 'TimeOff', 'Alarmcode',
+                    'UK Text', 'Error Type', 'NewTimeOn']]
+
+    # -------------------------------------------------------------------------
+
+
+def realperiod_10mins(last_df):
+    last_df['RealPeriod'] = pd.Timedelta(0)
+    last_df['Period Siemens(s)'] = pd.Timedelta(0)
+    last_df['Period Tarec(s)'] = pd.Timedelta(0)
+
+    mask_siemens = last_df['Error Type'] == 1
+    mask_tarec = last_df['Error Type'] == 0
+
+    df_TimeOn = last_df['NewTimeOn'].reset_index()
+    df_TimeOff = last_df['TimeOff'].reset_index()
+
+    df_TimeOn['level_1'] = df_TimeOn['level_1'] - pd.Timedelta(minutes=10)
+
+    last_df['10minTimeOn'] = df_TimeOn[['level_1', 'NewTimeOn']].max(1).values
+
+    last_df['10minTimeOff'] = df_TimeOff[['level_1', 'TimeOff']].min(1).values
+
+    last_df['RealPeriod'] = last_df['10minTimeOff'] - last_df['10minTimeOn']
+
+    last_df.loc[mask_siemens, 'Period Siemens(s)'] = (
+        last_df.loc[mask_siemens, 'RealPeriod'])
+    last_df.loc[mask_tarec, 'Period Tarec(s)'] = (
+        last_df.loc[mask_tarec, 'RealPeriod'])
+
+    return last_df
+
+
+def remove_1005_overlap(merged_last_df, StationNr, alarms_df_1005_10min):
+    # if len(merged_last_df) <= 1:
+    #     return merged_last_df
+    # print(merged_last_df)
+    for i, j in merged_last_df.iterrows():
+        if j['Alarmcode'] != 1005:
+            df = alarms_df_1005_10min.loc[
+                alarms_df_1005_10min['StationNr'] == StationNr]
+            if df.empty:
+                break
+            df['j_10minTimeOn'] = j['10minTimeOn']
+            df['j_10minTimeOff'] = j['10minTimeOff']
+            df['Timedelta(0)'] = pd.Timedelta(0)
+            latest_start = df[['10minTimeOn', 'j_10minTimeOn']].max(1)
+            earliest_end = df[['10minTimeOff', 'j_10minTimeOff']].min(1)
+
+            df['delta'] = (earliest_end - latest_start)
+
+            df['Overlap'] = df[['delta', 'Timedelta(0)']].max(1)
+
+            merged_last_df.loc[i, 'RealPeriod'] = (
+                merged_last_df.loc[i, 'RealPeriod'] - df['Overlap'].sum())
+    return merged_last_df
+
+
+def full_range(df, period, next_period):
+    month_range = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
+                                pd.Timestamp(f'{next_period}-01 00:00:00.000'),
+                                freq='10T')
+
+    new_df = pd.DataFrame(index=month_range)
+
+    df = df.set_index('TimeStamp')
+    df = df.drop('StationNr', axis=1)
+
+    return new_df.join(df, how='left')
+
+
 def CF(M, WTN=131, AL_ALL=0.08):
 
     def AL(M):
@@ -560,8 +647,6 @@ class read_files():
             alarms.StationNr <= 2307535].reset_index(
             drop=True)
 
-        print('Alarms Loaded')
-
         alarms.dropna(subset=['Alarmcode'], inplace=True)
 
         alarms.reset_index(drop=True, inplace=True)
@@ -630,6 +715,8 @@ def full_calculation(period):
     period_month = period_dt.month
     previous_period_dt = period_dt + relativedelta(months=-1)
     previous_period = previous_period_dt.strftime("%Y-%m")
+    next_period_dt = period_dt + relativedelta(months=1)
+    next_period = next_period_dt.strftime("%Y-%m")
 
     try:
 
@@ -644,7 +731,7 @@ def full_calculation(period):
     ''' label scada alarms with coresponding error type
     and only keep alarm codes in error list'''
     result_sum = pd.merge(alarms, error_list[[
-                          'Alarmcode', 'Error Type']],
+                          'Alarmcode', 'Error Type', 'UK Text']],
                           on='Alarmcode',
                           how='inner', sort=False)
 
@@ -705,18 +792,79 @@ def full_calculation(period):
 
     alarms_result_sum = alarms_result_sum.loc[mask]
 
-    # Binning alarms
+    # Binning alarms (old method)
 
     print('Binning')
-    grp_lst_args = iter([(n, period)
-                         for n in alarms_result_sum.groupby('StationNr')])
+    # grp_lst_args = iter([(n, period)
+    #                      for n in alarms_result_sum.groupby('StationNr')])
 
-    alarms_binned = pool.starmap(upsample, grp_lst_args)
+    # alarms_binned = pool.starmap(upsample, grp_lst_args)
 
-    alarms_binned = pd.concat(alarms_binned)
+    # alarms_binned = pd.concat(alarms_binned)
 
-    alarms_binned.reset_index(inplace=True)
-    alarms_binned.rename(columns={'index': 'TimeStamp'}, inplace=True)
+    # alarms_binned.reset_index(inplace=True)
+    # alarms_binned.rename(columns={'index': 'TimeStamp'}, inplace=True)
+
+    # Binning alarms and remove overlap with 1005 (new method)
+
+    alarms_df_clean = alarms_result_sum.loc[(
+        alarms_result_sum['RealPeriod'].dt.total_seconds() != 0)]
+
+    alarms_df_1005 = alarms_result_sum.loc[
+        (alarms_result_sum['Alarmcode'] == 1005)]
+    alarms_df_1005['TimeOff'] = alarms_df_1005['NewTimeOn']
+    alarms_df_1005['NewTimeOn'] = alarms_df_1005['TimeOn']
+
+    alarms_df_clean_10min = alarms_df_clean.groupby(
+        'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+
+    alarms_df_clean_10min = realperiod_10mins(alarms_df_clean_10min)
+
+    alarms_df_1005_10min = alarms_df_1005.groupby(
+        'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+    alarms_df_1005_10min = realperiod_10mins(alarms_df_1005_10min)
+
+    alarms_df_clean_10min.reset_index(inplace=True)
+    alarms_df_1005_10min.reset_index(inplace=True)
+
+    merged_last_df = pd.concat([alarms_df_clean_10min,
+                                alarms_df_1005_10min]).sort_values(
+                                    ['StationNr', '10minTimeOn']).reset_index()
+
+    merged_last_df = merged_last_df.drop(
+        'index', axis=1).rename(columns={'level_1': 'TimeStamp'})
+
+    df = merged_last_df.groupby('StationNr').apply(
+        lambda df: remove_1005_overlap(df, df.name, alarms_df_1005_10min))
+
+    mask_siemens = df['Error Type'] == 1
+    mask_tarec = df['Error Type'] == 0
+    df.loc[mask_siemens,
+           'Period Siemens(s)'] = df.loc[mask_siemens, 'RealPeriod']
+    df.loc[mask_tarec, 'Period Tarec(s)'] = df.loc[mask_tarec, 'RealPeriod']
+
+    alarms_binned = df.groupby(['StationNr', 'TimeStamp']).agg(
+        {'RealPeriod': 'sum',
+         'Period Tarec(s)': 'sum',
+         'Period Siemens(s)': 'sum',
+         'UK Text': '|'.join, }).reset_index()
+
+    alarms_binned = (
+        alarms_binned
+        .groupby('StationNr')
+        .apply(lambda df: full_range(df, period, next_period))
+        .reset_index()
+        .rename(columns={'level_1': 'TimeStamp',
+                         'StationNr': 'StationId',
+                         'Period Tarec(s)': 'Period 0(s)',
+                         'Period Siemens(s)': 'Period 1(s)'}))
+
+    alarms_binned['Period 0(s)'] = (alarms_binned['Period 0(s)']
+                                    .dt.total_seconds())
+    alarms_binned['Period 1(s)'] = (alarms_binned['Period 1(s)']
+                                    .dt.total_seconds())
+    alarms_binned['RealPeriod'] = (alarms_binned['RealPeriod']
+                                   .dt.total_seconds())
 
     print('Alarms Binned')
 
@@ -846,9 +994,9 @@ def full_calculation(period):
         # if at least 3 of these conditions are true
         mask_1 = ((
             cnt_115_final['wtc_AcWindSp_mean'] < 4.5) & ((
-                cnt_115_final[('met_WindSpeedRot_mean', 246)] < 5.5) | (
-                cnt_115_final[('met_WindSpeedRot_mean', 38)] < 5.5) | (
-                cnt_115_final[('met_WindSpeedRot_mean', 39)] < 5.5))) & (
+                cnt_115_final[('met_WindSpeedRot_mean', 246)] < 6) | (
+                cnt_115_final[('met_WindSpeedRot_mean', 38)] < 6) | (
+                cnt_115_final[('met_WindSpeedRot_mean', 39)] < 6))) & (
             cnt_115_final['EL_indefini'] > 0)
 
         mask_2 = mask_1.shift().bfill()
