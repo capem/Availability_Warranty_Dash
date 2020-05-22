@@ -234,8 +234,8 @@ def callback_calcul(x):
     MAA_indefini = 100 * (Ep + ELX) / (Ep + EL)
 
     MAA_indefni_adjusted = 100 * (
-        Ep + ELX + EL_wind + EL_wind_start + EL_alarm_start) / (
-            Ep + EL)
+        Ep + ELX) / (
+            Ep + EL - (EL_wind + EL_wind_start + EL_alarm_start))
 
     Results_grouped['MAA'] = MAA_result
 
