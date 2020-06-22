@@ -808,10 +808,10 @@ def full_calculation(period):
     # Binning alarms and remove overlap with 1005 (new method)
 
     alarms_df_clean = alarms_result_sum.loc[(
-        alarms_result_sum['RealPeriod'].dt.total_seconds() != 0)]
+        alarms_result_sum['RealPeriod'].dt.total_seconds() != 0)].copy()
 
     alarms_df_1005 = alarms_result_sum.loc[
-        (alarms_result_sum['Alarmcode'] == 1005)]
+        (alarms_result_sum['Alarmcode'] == 1005)].copy()
     alarms_df_1005['TimeOff'] = alarms_df_1005['NewTimeOn']
     alarms_df_1005['NewTimeOn'] = alarms_df_1005['TimeOn']
 
