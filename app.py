@@ -48,15 +48,15 @@ navbar = dbc.Navbar(
             href="/",
         ),
         dbc.NavLink("Calculate", href="/apps/app1",
-                    style={"font-size": "150%"}),
+                    style={"fontSize": "150%"}),
         dbc.NavLink("Adjust", href="/apps/adjust115",
-                    style={"font-size": "150%"}),
+                    style={"fontSize": "150%"}),
         dbc.NavLink("Results", href="/apps/results",
-                    style={"font-size": "150%"}),
+                    style={"fontSize": "150%"}),
     ],
     color="#eabf1a",
     dark=True,
-    style={"align-content": "right"},
+    style={"alignContent": "right"},
 )
 
 # import index

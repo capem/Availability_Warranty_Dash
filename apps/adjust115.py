@@ -27,9 +27,9 @@ def directories_adjust():
     return([{'label': i, 'value': i} for i in directories_adjust])
 
 
-column_style = {'height': '100%', 'flex-direction': 'column',
-                'display': 'flex', 'align-items': 'center',
-                'justify-content': 'center',
+column_style = {'height': '100%', 'flexDirection': 'column',
+                'display': 'flex', 'alignItems': 'center',
+                'justifyContent': 'center',
                 'boxShadow': '3px 3px 20px -10px #eabf1a',
                 'marginLeft': '10%', 'marginRight': '10%',
                 'marginBottom': '1%', 'marginTop': '10%'}
@@ -65,8 +65,8 @@ layout = html.Div([
                               })
             ],
                 no_gutters=True,
-                style={'flex-direction': 'column', 'align-items': 'center',
-                       'justify-content': 'center'}),
+                style={'flexDirection': 'column', 'alignItems': 'center',
+                       'justifyContent': 'center'}),
 
         ], style=column_style),
 
@@ -100,8 +100,8 @@ layout = html.Div([
             style=column_style),
 
     ],
-        style={'height': '50%', 'display': 'flex', 'align-items': 'center',
-               'justify-content': 'center'},
+        style={'height': '50%', 'display': 'flex', 'alignItems': 'center',
+               'justifyContent': 'center'},
         no_gutters=True)
 ], style={'height': '100vh'})
 

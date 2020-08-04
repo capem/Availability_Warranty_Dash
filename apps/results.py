@@ -87,8 +87,8 @@ layout = html.Div([
                            }),
              tabs],
             no_gutters=True,
-            style={'flex-direction': 'column', 'align-items': 'center',
-                   'justify-content': 'center'}),
+            style={'flexDirection': 'column', 'alignItems': 'center',
+                   'justifyContent': 'center'}),
     dbc.Row(html.A('Download Grouped Results', id="download_grouped",
                    style={'background-color': 'white',
                           'color': 'black',
@@ -96,8 +96,8 @@ layout = html.Div([
                           'text-decoration': 'none',
                           'border': '1px solid black',
                           }),
-            no_gutters=True, style={'justify-content': 'center'}),
-    dbc.Row(id='table', no_gutters=True, style={'justify-content': 'center'})
+            no_gutters=True, style={'justifyContent': 'center'}),
+    dbc.Row(id='table', no_gutters=True, style={'justifyContent': 'center'})
 ])
 
 

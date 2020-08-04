@@ -27,9 +27,9 @@ directories = [a for a in os.listdir(
     './monthly_data/uploads/') if a != '.gitkeep']
 
 
-column_style = {'height': '100%', 'flex-direction': 'column',
-                'display': 'flex', 'align-items': 'center',
-                'justify-content': 'center',
+column_style = {'height': '100%', 'flexDirection': 'column',
+                'display': 'flex', 'alignItems': 'center',
+                'justifyContent': 'center',
                 'boxShadow': '3px 3px 20px -10px #eabf1a',
                 'marginLeft': '10%', 'marginRight': '10%',
                 'marginBottom': '1%', 'marginTop': '8%'}
@@ -87,8 +87,8 @@ layout = html.Div([
                  ], style=column_style)
 
     ],
-        style={'height': '60%', 'display': 'flex', 'align-items': 'center',
-               'justify-content': 'center'},
+        style={'height': '60%', 'display': 'flex', 'alignItems': 'center',
+               'justifyContent': 'center'},
         no_gutters=True)
 ], style={'height': '100vh'})
 

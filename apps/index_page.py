@@ -10,17 +10,17 @@ from app import arrow as arrow
 directories = [a for a in os.listdir('./monthly_data/')]
 
 
-column_style = {'height': '100%', 'flex-direction': 'column',
-                'display': 'flex', 'align-items': 'center',
-                'justify-content': 'center',
+column_style = {'height': '100%', 'flexDirection': 'column',
+                'display': 'flex', 'alignItems': 'center',
+                'justifyContent': 'center',
                 'boxShadow': '2px 2px 50px -3px grey',
                 'borderRadius': '10px',
                 'marginLeft': '5%', 'marginRight': '5%',
                 'marginBottom': '1%', 'marginTop': '15%'}
 
-arrow_style = {'height': '100%', 'flex-direction': 'column',
-               'display': 'flex', 'align-items': 'center',
-               'justify-content': 'center',
+arrow_style = {'height': '100%', 'flexDirection': 'column',
+               'display': 'flex', 'alignItems': 'center',
+               'justifyContent': 'center',
                'marginLeft': '-10%', 'marginRight': '-10%',
                'marginBottom': '1%', 'marginTop': '15%'}
 
@@ -44,7 +44,7 @@ layout = html.Div([
         dbc.Col(dbc.Button('Results', href='/apps/results'),
                 style=column_style)
     ],
-        style={'height': '30%', 'display': 'flex', 'align-items': 'center',
-               'justify-content': 'center'},
+        style={'height': '30%', 'display': 'flex', 'alignItems': 'center',
+               'justifyContent': 'center'},
         no_gutters=True)
 ], style={'height': '100vh'})
