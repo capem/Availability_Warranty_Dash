@@ -4,6 +4,7 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from dash.dash import no_update
+import re
 # from flask_caching import Cache
 
 import os
@@ -16,7 +17,14 @@ from app import navbar as navbar
 from app import app
 import calculation as calculation
 
+import dash_uploader as du
 
+temp_upload_directory = r"./monthly_data/uploads/temp/"
+
+temp_upload_directory_abs = os.path.abspath(
+    temp_upload_directory).replace('\\', '/') + '/'
+
+du.configure_upload(app, temp_upload_directory, use_upload_id=False)
 # cache = Cache(app.server, config={
 #    # try 'filesystem' if you don't want to setup redis
 #    'CACHE_TYPE': 'redis',
@@ -41,39 +49,30 @@ layout = html.Div([
     # html.Iframe(src="https://www.youtube.com/embed/1CSeY10zbqo",
     #             style={'width':560 , 'height': 315, 'frameborder': 0}),
     dbc.Row([
-        dbc.Col([dbc.Button('Submit/Upload', id='submit-button', n_clicks=0),
-                 dbc.Tooltip(
-                     "Files To Upload,"
-                     "y-m-cnt.zip, y-m-grd.zip,"
-                     "y-m-sum.zip, y-m-met.zip,"
-                     "y-m-tur.zip",
-                     target="submit-button"),
 
-                 dcc.DatePickerSingle(
-                     id='date_picker',
-                     clearable=True,
-                     display_format='YYYY-MM',
-                     style={'marginTop': 15},
-                     persistence=True),
-                 dcc.Loading(dcc.Upload(id="upload-data",
-                                        children=html.Div(
-                                            ["Drag and drop or click"
-                                             "to select "
-                                             "a file to upload."]),
-                                        style={"width": "100%",
-                                               "height": "60px",
-                                               "lineHeight": "60px",
-                                               "borderWidth": "1px",
-                                               "borderStyle": "dashed",
-                                               "borderRadius": "5px",
-                                               "textAlign": "center",
-                                               "margin": "10px",
-                                               },
-                                        multiple=False,
-                                        max_size=-1),
-                             color='#eabf1a'),
-                 html.H2("File List"),
-                 dcc.Loading(html.Ul(id="file-list"), color='#eabf1a')],
+        dbc.Col([
+                du.Upload(id='dash_uploader',
+                             text='Drag and Drop Here to upload!',
+                             max_files=1,
+                             filetypes=['zip']),
+                dbc.Tooltip('''Files To Upload,
+                             y-m-cnt.zip, y-m-grd.zip,
+                             y-m-sum.zip, y-m-met.zip,
+                             y-m-tur.zip''',
+                            target="dash_uploader"),
+
+                dcc.DatePickerSingle(id='date_picker',
+                                     clearable=False,
+                                     display_format='YYYY-MM',
+                                     style={'margin': 15},
+                                     persistence=True,
+                                     number_of_months_shown=2,
+                                     show_outside_days=False),
+
+                html.H3("Uploaded Files List"),
+
+                dcc.Loading(html.Ul(id="file-list"), color='#eabf1a')],
+
                 style=column_style),
 
         dbc.Col([html.P(children='After Uploading Files'),
@@ -101,98 +100,67 @@ def file_download(path, filename):
 
 @app.callback(
     [Output("file-list", "children"),
-     Output("calculation_selection_dropdown", "options"),
-     Output("upload-data", "filename"),
-     Output("upload-data", "contents")],
-    [Input('submit-button', 'n_clicks')],
-    [State('date_picker', 'date'),
-     State("upload-data", "filename"),
-     State("upload-data", "contents")]
+     Output("calculation_selection_dropdown", "options")],
+    [Input('date_picker', 'date'),
+     Input('dash_uploader', 'isCompleted')],
+    [State('dash_uploader', 'fileNames')]
 )
-def update_output(clicks, date, filenames, file_contents):
-    """Save uploaded files and regenerate the file list."""
+def update_output(date, isCompleted, fileNames):
+    """regenerate the file list."""
 
-    if (None in (filenames, file_contents)) and (date is not None):
-        print(date)
+    year = str(dt.strptime(date, '%Y-%m-%d').year)
+    month = str(dt.strptime(date, '%Y-%m-%d').month)
 
-        year = str(dt.strptime(date, '%Y-%m-%d').year)
-        month = str(dt.strptime(date, '%Y-%m-%d').month)
+    period = year + '-' + month.zfill(2)
 
-        if len(month) == 1:
-            month = '0' + month
+    upload_directory = f"./monthly_data/uploads/{period}/"
 
-        period = year + '-' + month
-
-        UPLOAD_DIRECTORY = f"./monthly_data/uploads/{period}/"
-        if not os.path.exists(UPLOAD_DIRECTORY):
-            os.makedirs(UPLOAD_DIRECTORY)
-
-        def uploaded_files():
-            """List the files in the upload directory."""
-            files = []
-            for filename in os.listdir(UPLOAD_DIRECTORY):
-                path = os.path.join(UPLOAD_DIRECTORY, filename)
-                if os.path.isfile(path):
+    def uploaded_files():
+        """List the files in the upload directory."""
+        files = []
+        try:
+            for filename in os.listdir(upload_directory):
+                path = os.path.join(upload_directory, filename)
+                if os.path.isfile(path) & filename.lower().endswith('.zip'):
                     files.append(filename)
-            return files
+        except FileNotFoundError:
+            pass
 
-        files = uploaded_files()
+        return files
 
+    def move_uploaded_file(fileNames):
+
+        file_regex = r"^20[1-9][0-9]-(0[1-9]|1[0-2])-(cnt|sum|tur|grd|met).zip"
+
+        if not re.match(file_regex, fileNames[0]):
+            print('Err: File name not matching regex ,file will be deleted.')
+            os.remove(temp_upload_directory + fileNames[0])
+        else:
+            move_to_directory = f"./monthly_data/uploads/{period}/"
+            # if not os.path.exists(move_to_directory):
+            #     os.makedirs(move_to_directory)
+
+            os.renames(temp_upload_directory + fileNames[0],
+                       move_to_directory + fileNames[0])
+
+            print(fileNames)
+            print(fileNames[0][:7])
+
+    if isCompleted:
+        move_uploaded_file(fileNames)
+
+    directories = [a for a in os.listdir(
+        './monthly_data/uploads/') if (a not in ['temp', '.gitkeep'])]
+
+    files = uploaded_files()
+
+    if len(files) == 0:
+        return ([html.Li("No files yet!")],
+                [{'label': i, 'value': i} for i in directories])
+    else:
         return ([html.Li(file_download(period,
                                        filename)) for filename in files],
-                no_update,
-                no_update,
-                no_update,)
-
-    if None in(date, filenames, file_contents):
-        raise PreventUpdate
-
-    else:
-        year = str(dt.strptime(date, '%Y-%m-%d').year)
-        month = str(dt.strptime(date, '%Y-%m-%d').month)
-
-        if len(month) == 1:
-            month = '0' + month
-
-        period = year + '-' + month
-
-        UPLOAD_DIRECTORY = f"./monthly_data/uploads/{period}/"
-
-        def save_file(name, content):
-            """Decode and store a file uploaded with Plotly Dash."""
-            data = content.encode("utf8").split(b";base64,")[1]
-            with open(os.path.join(UPLOAD_DIRECTORY, name), "wb") as fp:
-                fp.write(base64.decodebytes(data))
-
-        def uploaded_files():
-            """List the files in the upload directory."""
-            files = []
-            for filename in os.listdir(UPLOAD_DIRECTORY):
-                path = os.path.join(UPLOAD_DIRECTORY, filename)
-                if os.path.isfile(path):
-                    files.append(filename)
-            return files
-
-        if not os.path.exists(UPLOAD_DIRECTORY):
-            os.makedirs(UPLOAD_DIRECTORY)
-
-        if filenames is not None and file_contents is not None:
-            # for name, data in zip(filenames, file_contents):
-            save_file(filenames, file_contents)
-
-        files = uploaded_files()
-
-        directories = [a for a in os.listdir(
-            './monthly_data/uploads/') if a != '.gitkeep']
-
-        if len(files) == 0:
-            return ([html.Li("No files yet!")],
-                    [{'label': i, 'value': i} for i in directories])
-        else:
-            return ([html.Li(file_download(period,
-                                           filename)) for filename in files],
-                    [{'label': i, 'value': i} for i in directories],
-                    None, None)
+                [{'label': i, 'value': i} for i in directories])
 
 
 @app.callback(
