@@ -18,7 +18,7 @@ PLOTLY_LOGO = "https://i.ibb.co/3v8qBHx/tarec-warranty.png"
 # server = Flask(__name__)
 # app = dash.Dash(server=server, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LUX])
 server = app.server
 
 
@@ -42,7 +42,7 @@ navbar = dbc.Navbar(
         html.A(
             html.Img(
                 src=PLOTLY_LOGO,
-                style={"height": "6vh",
+                style={"height": "45px",
                        "boxShadow": "3px 3px 20px -10px blue"},
             ),
             href="/",
@@ -56,7 +56,9 @@ navbar = dbc.Navbar(
     ],
     color="#eabf1a",
     dark=True,
-    style={"alignContent": "right"},
+    style={"justifyContent": "start",
+           "flexWrap": "nowrap",
+           "width": "100%"},
 )
 
 # import index

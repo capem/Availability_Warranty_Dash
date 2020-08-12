@@ -52,15 +52,15 @@ layout = html.Div([
                                     'margin': '0 auto', 'marginBottom': 10},
                              options=directories_adjust()),
                 html.A('Download 115 Alarms', id="download_btn_115",
-                       style={'background-color': 'white',
+                       style={'backgroundColor': 'white',
                               'color': 'black', 'padding': '5px',
-                              'text-decoration': 'none',
+                              'textDecoration': 'none',
                               'border': '1px solid black',
                               }),
                 html.A('Download 20-25 alarms', id="download_btn_20",
-                       style={'background-color': 'white',
+                       style={'backgroundColor': 'white',
                               'color': 'black', 'padding': '5px',
-                              'text-decoration': 'none',
+                              'textDecoration': 'none',
                               'border': '1px solid black',
                               })
             ],
@@ -143,7 +143,7 @@ def callback_download_adjust(x):
 def update_adjust(clicks, filenames, file_contents):
     """Save uploaded files and regenerate the file list."""
 
-    if None in(filenames, file_contents):
+    if None in (filenames, file_contents):
         raise PreventUpdate
 
     else:
@@ -152,9 +152,9 @@ def update_adjust(clicks, filenames, file_contents):
             """Decode and store a file uploaded with Plotly Dash."""
             if 'cut' in name:
 
-                UPLOAD_DIRECTORY = f"./monthly_data/20/"
+                UPLOAD_DIRECTORY = "./monthly_data/20/"
             elif '115' in name:
-                UPLOAD_DIRECTORY = f"./monthly_data/115/"
+                UPLOAD_DIRECTORY = "./monthly_data/115/"
                 print(UPLOAD_DIRECTORY)
 
             data = content.encode("utf8").split(b";base64,")[1]

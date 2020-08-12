@@ -8,7 +8,8 @@ from app import app as app
 from apps import index_page, app1, results, adjust115
 
 app.layout = html.Div(
-    [dcc.Location(id="url", refresh=False), html.Div(id="page-content")]
+    [dcc.Location(id="url", refresh=False),
+     html.Div(id="page-content", style={'height': '100vh'})]
 )
 
 

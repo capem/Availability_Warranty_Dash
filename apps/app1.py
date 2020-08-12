@@ -35,13 +35,15 @@ directories = [a for a in os.listdir(
     './monthly_data/uploads/') if a != '.gitkeep']
 
 
-column_style = {'height': '100%', 'flexDirection': 'column',
-                'display': 'flex', 'alignItems': 'center',
+column_style = {'height': '60vh',
+                'gridTemplateColumns': '100%',
+                'display': 'grid',
+                'alignItems': 'center',
                 'justifyContent': 'center',
                 'boxShadow': '3px 3px 20px -10px #eabf1a',
-                'marginLeft': '10%', 'marginRight': '10%',
-                'marginBottom': '1%', 'marginTop': '8%'}
-
+                'overflow': 'visible',
+                'margin': '5%',
+                'position': 'unset'}
 
 layout = html.Div([
     dcc.Store(id='memory'),
@@ -51,45 +53,69 @@ layout = html.Div([
     dbc.Row([
 
         dbc.Col([
-                du.Upload(id='dash_uploader',
-                             text='Drag and Drop Here to upload!',
-                             max_files=1,
-                             filetypes=['zip']),
+
                 dbc.Tooltip('''Files To Upload,
                              y-m-cnt.zip, y-m-grd.zip,
                              y-m-sum.zip, y-m-met.zip,
                              y-m-tur.zip''',
-                            target="dash_uploader"),
+                            target="dash_uploader"
+                            ),
 
                 dcc.DatePickerSingle(id='date_picker',
                                      clearable=False,
                                      display_format='YYYY-MM',
-                                     style={'margin': 15},
+                                     style={'margin': 15,
+                                            'position': 'static',
+                                            'placeSelf': 'center'},
                                      persistence=True,
-                                     number_of_months_shown=2,
-                                     show_outside_days=False),
+                                     number_of_months_shown=1,
+                                     show_outside_days=False,
+                                     with_portal=True
+                                     ),
 
-                html.H3("Uploaded Files List"),
+                html.H3("Uploaded Files List",
+                        style={'placeSelf': 'center'}),
+                dcc.Loading(html.Ul(id="file-list"),
+                            color='#eabf1a'),
 
-                dcc.Loading(html.Ul(id="file-list"), color='#eabf1a')],
+                html.Div(
+                    du.Upload(id='dash_uploader',
+                              text='Drag and Drop Here to upload!',
+                              max_files=1,
+                              filetypes=['zip'],
+                              default_style={'overflow': 'hide'}
 
-                style=column_style),
+                              ),
+                    style={}
+                )],
+                style=dict(column_style, overflow='auto')
+                ),
 
-        dbc.Col([html.P(children='After Uploading Files'),
-                 html.P(children='Enter a value to Calculate'),
-                 dcc.Dropdown(id='calculation_selection_dropdown',
-                              options=[{'label': i,
-                                        'value': i} for i in directories],
-                              style={'width': '60%', 'textAlign': 'center',
-                                     'margin': '0 auto', 'marginBottom': 10}),
-                 dcc.Loading(id='MAA', color='#eabf1a')
-                 ], style=column_style)
+        dbc.Col([html.P(['After Uploading Files', html.Br(),
+                         'Select a month to Calculate'],
+                        style={'placeSelf': 'end center'}),
+                 html.Div(  # wrapped because of styling problmes in dropdown
+                     dcc.Dropdown(id='calculation_selection_dropdown',
+                                  options=[{'label': i,
+                                            'value': i} for i in directories],
+                                  style={}),
+                     style={'width': '60%', 'placeSelf': 'center'},
+        ),
+            dcc.Loading(id='MAA', color='#eabf1a')
+        ], style=column_style
+        )
 
     ],
-        style={'height': '60%', 'display': 'flex', 'alignItems': 'center',
-               'justifyContent': 'center'},
-        no_gutters=True)
-], style={'height': '100vh'})
+        align='center',
+        justify='center',
+        no_gutters=True
+    )],
+    style={'height': '100vh',
+           'display': 'flex',
+           'flexDirection': 'column',
+           'alignContent': 'stretch',
+           'justifyItems': 'stretch'}
+)
 
 
 def file_download(path, filename):
@@ -107,6 +133,8 @@ def file_download(path, filename):
 )
 def update_output(date, isCompleted, fileNames):
     """regenerate the file list."""
+    if date is None:
+        raise PreventUpdate
 
     year = str(dt.strptime(date, '%Y-%m-%d').year)
     month = str(dt.strptime(date, '%Y-%m-%d').month)
@@ -167,14 +195,18 @@ def update_output(date, isCompleted, fileNames):
     Output('MAA', 'children'),
     [Input('calculation_selection_dropdown', 'value')])
 # @cache.memoize(timeout=60)
-def callback_calcul(x):
-    print(x)
-    if x is None:
+def callback_calcul(value):
+
+    if value is None:
         raise PreventUpdate
 
-    Results = calculation.full_calculation(period=x)
+    try:
+        Results = calculation.full_calculation(period=value)
+    except FileNotFoundError:
+        return html.P('Please upload rest of files.')
+
     Results.to_csv(
-        f'./monthly_data/results/{x}-Availability.csv',
+        f'./monthly_data/results/{value}-Availability.csv',
         decimal=',', sep=';')
 
     Results = Results[['StationId', 'wtc_kWG1TotE_accum', 'Epot',
@@ -214,7 +246,7 @@ def callback_calcul(x):
     Results_grouped.index = Results_grouped.index + 1
 
     Results_grouped.to_csv(
-        f"./monthly_data/results/Grouped_Results/grouped_{x}-Availability.csv",
+        f"./monthly_data/results/Grouped_Results/grouped_{value}-Availability.csv",
         decimal=',', sep=';')
     print('Done')
 

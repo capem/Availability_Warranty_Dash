@@ -32,7 +32,7 @@ def directories_results():
     return([{'label': i, 'value': i} for i in directories_results])
 
 
-tab_style = {'width': '35vw', 'height': '35vh'}
+# tab_style = {'width': '45vw', 'height': '60%'}
 
 tab1_content = dbc.Card(
     dbc.CardBody(
@@ -48,18 +48,20 @@ tab1_content = dbc.Card(
 
         ]
     ),
-    className="mt-3", style=tab_style
+    className="mt-3",
+    # style=tab_style
 )
 
 tab2_content = dbc.Card(
     dbc.CardBody(
         [html.P(id='Total_duration', className="card-text"),
-            html.P(id='Siemens_duration', className="card-text"),
-            html.P(id='Tarec_duration', className="card-text"),
+         html.P(id='Siemens_duration', className="card-text"),
+         html.P(id='Tarec_duration', className="card-text"),
             # dbc.Button("Click here", color="success"),
          ]
     ),
-    className="mt-3", style=tab_style
+    className="mt-3",
+    # style=tab_style
 )
 
 tabs = dbc.Tabs(
@@ -69,8 +71,10 @@ tabs = dbc.Tabs(
     ]
 )
 
+
 layout = html.Div([
     navbar,
+
     dbc.Row([dbc.Alert("Please Select a Period", color="warning"),
              dbc.Button('update', id='update_dropdown',
                         style={'display': 'none'}),
@@ -79,25 +83,31 @@ layout = html.Div([
                                  'margin': '0 auto', 'marginBottom': 10},
                           options=directories_results()),
              html.A('Download Detailed Results', id="download_button",
-                    style={'background-color': 'white',
+                    style={'backgroundColor': 'white',
                            'color': 'black',
                            'padding': '5px',
-                           'text-decoration': 'none',
+                           'textDecoration': 'none',
                            'border': '1px solid black',
                            }),
              tabs],
             no_gutters=True,
             style={'flexDirection': 'column', 'alignItems': 'center',
                    'justifyContent': 'center'}),
+
     dbc.Row(html.A('Download Grouped Results', id="download_grouped",
-                   style={'background-color': 'white',
+                   style={'backgroundColor': 'white',
                           'color': 'black',
                           'padding': '5px',
-                          'text-decoration': 'none',
+                          'textDecoration': 'none',
                           'border': '1px solid black',
                           }),
             no_gutters=True, style={'justifyContent': 'center'}),
-    dbc.Row(id='table', no_gutters=True, style={'justifyContent': 'center'})
+    dbc.Row(id='table', no_gutters=True,
+            style={
+                'justifyContent': 'center',
+                'margin': '0 auto'
+            }
+            )
 ])
 
 
@@ -124,11 +134,13 @@ def update_dropdown(x):
      Output('Epot', 'children'),
      Output('download_button', 'href'),
      Output('download_grouped', 'href'),
-     Output('table', 'children')],
+     Output('table', 'children')
+     ],
     [Input('month_selection_dropdown', 'value')])
 # @cache.memoize(timeout=60)
 def callback_a(x):
 
+    # Danger !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if x is None:
         return tuple(None for i in range(13))
 
@@ -167,20 +179,31 @@ def callback_a(x):
     # location = f"/download/{urlquote('results')}/anaconda.exe"
     location = f"/download/results/{urlquote(x)}.csv"
 
-    location_grouped = (f"/download/results/Grouped_Results/"
-                        f"grouped_{urlquote(x)}.csv")
+    location_grouped = ('/download/results/Grouped_Results/'
+                        f'grouped_{urlquote(x)}.csv')
+
+    Results = Results[['Unnamed: 0', 'StationId', 'Period 1(s)',
+                       'Period 0(s)', 'Duration 115(s)', 'MAA',
+                       'MAA_indefini', 'MAA_indefni_adjusted']]
 
     table = dash_table.DataTable(
-        columns=[{"name": i, "id": i} for i in Results.columns],
-        data=Results.to_dict('records'))
+        columns=[
+            {"id": i, "name": i} for i in Results.columns],
+        data=Results.to_dict('records'),
+        fixed_rows={'headers': True},
+        style_cell={
+            'width': 100
+        }
+    )
 
-    return (f'Total duration: {round(Total_duration, 2)} Hour | \
-                {round(100*Total_duration/(24*days*131),2)}%',
-            f'Siemens duration: {round(Siemens_duration, 2)} Hour | \
-                {round(100*Siemens_duration/(24*days*131),2)}%',
-            f'Tarec duration: {round(Tarec_duration, 2)} Hour | \
-                {round(100*Tarec_duration/(24*days*131), 2)}%',
+    # table = html.Iframe(srcDoc=Results.to_html())
 
+    return (f'''Total duration: {round(Total_duration, 2)} Hour |
+                {round(100*Total_duration/(24*days*131),2)}%''',
+            f'''Siemens duration: {round(Siemens_duration, 2)} Hour |
+                {round(100*Siemens_duration/(24*days*131),2)}%''',
+            f'''Tarec duration: {round(Tarec_duration, 2)} Hour |
+                {round(100*Tarec_duration/(24*days*131), 2)}%''',
             f'MAA = {MAA_result}% | MAA_indefini = {MAA_indefini}% |',
             f'MAA_indefini_adjusted = {MAA_indefini_adjusted}%',
             f'Energy produced: {Ep:,.2f} kWh',
