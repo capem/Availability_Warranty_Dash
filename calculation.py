@@ -37,13 +37,13 @@ def sqldate_to_datetime(column):
     except:
         pass
     day_parts = np.modf(column.loc[~column.isna()])
-    column = column.fillna(0)
 
     column.loc[~column.isna()] = (
         dt(1899, 12, 30) +
         day_parts[1].astype('timedelta64[D]', errors='ignore') +
         (day_parts[0] * 86400000).astype('timedelta64[ms]', errors='ignore')
     )
+    column = column.fillna(pd.NaT)
     return column
 
 
@@ -561,8 +561,8 @@ def upsample_115_20(df_group, period, alarmcode):
     df = df.set_index('TimeOn')
     df = df.sort_index()
 
-    df.loc[::2, clmn_name] = 1
-    df.loc[1::2, clmn_name] = -1
+    df.iloc[::2, 0] = 1
+    df.iloc[1::2, 0] = -1
 
     # precision en miliseconds
     precision = 1000
@@ -791,6 +791,8 @@ def full_calculation(period):
         alarms_result_sum['TimeOff'].dt.month == period_month)
 
     alarms_result_sum = alarms_result_sum.loc[mask]
+    
+    pool.close()
 
     # Binning alarms (old method)
 
@@ -868,7 +870,6 @@ def full_calculation(period):
 
     print('Alarms Binned')
 
-    pool.close()
     # -------merging cnt, grd, tur, met,upsampled (alarms ,115 and 20/25)------
     # merging upsampled alarms with energy production
 
