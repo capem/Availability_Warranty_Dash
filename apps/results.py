@@ -57,6 +57,7 @@ tab2_content = dbc.Card(
         [html.P(id='Total_duration', className="card-text"),
          html.P(id='Siemens_duration', className="card-text"),
          html.P(id='Tarec_duration', className="card-text"),
+         html.P(id='duration_115', className="card-text"),
             # dbc.Button("Click here", color="success"),
          ]
     ),
@@ -117,7 +118,7 @@ layout = html.Div([
 def update_dropdown(x):
     path = './monthly_data/results/'
     directories_results = [a for a in os.listdir(
-        path) if (os.path.isfile(os.path.join(path, a)) and a != '.gitkeep')]
+        path) if (os.path.isfile(os.path.join(path, a)) and a != '.gitkeep' and a.endswith('.csv'))]
     return([{'label': i[:-4], 'value': i[:-4]} for i in directories_results])
 
 
@@ -125,6 +126,7 @@ def update_dropdown(x):
     [Output('Total_duration', 'children'),
      Output('Siemens_duration', 'children'),
      Output('Tarec_duration', 'children'),
+     Output('duration_115', 'children'),
      Output('MAA_result', 'children'),
      Output('wtc_kWG1TotE_accum', 'children'),
      Output('EL115', 'children'),
@@ -142,7 +144,7 @@ def callback_a(x):
 
     # Danger !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if x is None:
-        return tuple(None for i in range(13))
+        return tuple(None for i in range(14))
 
     Results = round(pd.read_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{x}.csv",
@@ -170,6 +172,7 @@ def callback_a(x):
     Siemens_duration = Results['Period 1(s)'].sum() / 3600
     Tarec_duration = Results['Period 0(s)'].sum() / 3600
     Total_duration = Siemens_duration + Tarec_duration
+    duration_115 = Results['Duration 115(s)'].sum() / 3600
 
     year = int(x[:4])
     month = int(x[5:7])
@@ -200,10 +203,16 @@ def callback_a(x):
 
     return (f'''Total duration: {round(Total_duration, 2)} Hour |
                 {round(100*Total_duration/(24*days*131),2)}%''',
+
             f'''Siemens duration: {round(Siemens_duration, 2)} Hour |
                 {round(100*Siemens_duration/(24*days*131),2)}%''',
+
             f'''Tarec duration: {round(Tarec_duration, 2)} Hour |
                 {round(100*Tarec_duration/(24*days*131), 2)}%''',
+
+            f'''115 duration: {round(duration_115, 2)} Hour |
+                {round(100*duration_115/(24*days*131), 2)}%''',
+
             f'MAA = {MAA_result}% | MAA_indefini = {MAA_indefini}% |',
             f'MAA_indefini_adjusted = {MAA_indefini_adjusted}%',
             f'Energy produced: {Ep:,.2f} kWh',
