@@ -302,6 +302,9 @@ def inner_fill(df, name, alarms_result_sum):
                 result_turbine.TimeOn.shift(-1) < df['TimeOn'].iat[j + 1])]
                 .TimeOff.max())
 
+            if TimeOn is pd.NaT:
+                TimeOn = df['TimeOn'].iat[j + 1]
+
             line = pd.DataFrame(
                 {'TimeOn': TimeOn, 'Alarmcode': 115,
                  'Parameter': ['Resumed'],
@@ -316,13 +319,16 @@ def inner_fill(df, name, alarms_result_sum):
             TimeOn = alarms_result_sum.loc[(
                 alarms_result_sum.StationNr == name) & (
                 alarms_result_sum.TimeOff < df['TimeOn'].iat[j + 1]) & (
-                alarms_result_sum.TimeOff > df['TimeOn'].iat[j])].TimeOn.min()
+                alarms_result_sum.TimeOff > df['TimeOn'].iat[j]) & (
+                alarms_result_sum.TimeOn > df['TimeOn'].iat[j])].TimeOn.min()
 
-            result_turbine = alarms_result_sum.loc[(
-                alarms_result_sum.StationNr == name)].copy()
+            # result_turbine = alarms_result_sum.loc[(
+            #     alarms_result_sum.StationNr == name)].copy()
 
-            TimeOn = result_turbine.loc[(
-                result_turbine.TimeOff > df['TimeOn'].iat[j])].TimeOn.min()
+            # TimeOn = result_turbine.loc[(
+            #     result_turbine.TimeOff > df['TimeOn'].iat[j])].TimeOn.min()
+            if TimeOn is pd.NaT:
+                TimeOn = df['TimeOn'].iat[j]
 
             line = pd.DataFrame(
                 {'TimeOn': TimeOn, 'Alarmcode': 115,
@@ -718,13 +724,28 @@ def full_calculation(period):
     next_period_dt = period_dt + relativedelta(months=1)
     next_period = next_period_dt.strftime("%Y-%m")
 
-    try:
+    period_start = f'{period}-01 00:10:00.000'
+    period_end = f'{next_period}-01 00:00:00.000'
 
-        previous_alarms = read_files.read_sum(previous_period)
-        alarms = alarms.append(previous_alarms)
+    for i in range(1, 4):  # append last 3 months alarms
+        
+        ith_previous_period_dt = period_dt + relativedelta(months=-i)
+        ith_previous_period = ith_previous_period_dt.strftime("%Y-%m")
 
-    except FileNotFoundError:
-        print('Previous mounth alarms File not found')
+        try:
+            previous_alarms = read_files.read_sum(ith_previous_period)
+            alarms = alarms.append(previous_alarms)
+
+        except FileNotFoundError:
+            print(f'Previous mounth -{i} alarms File not found')
+
+    # ------------------------------Keep only alarms in period------------------------
+
+    print('Keep only alarms in period')
+
+    alarms = alarms.query('(@period_start < TimeOn < @period_end) | \
+						   (@period_start < TimeOff < @period_end) | \
+	  					   ((TimeOn < @period_start) & (@period_end < TimeOff))')
 
     # ------------------------------------------------------
 
@@ -755,7 +776,7 @@ def full_calculation(period):
     alarms_115_filled = fill_115(alarms, period, alarms_result_sum)
     print('115 filled')
 
-    print(f'upsampling 115')
+    print('upsampling 115')
     grp_lst_args = iter([(n, period, '115')
                          for n in alarms_115_filled.groupby('StationNr')])
 
@@ -776,7 +797,7 @@ def full_calculation(period):
     grp_lst_args = iter([(n, period, '20-25')
                          for n in alarms_20_filled.groupby('StationNr')])
 
-    print(f'upsampling 20-25')
+    print('upsampling 20-25')
     alarms_20_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
 
     alarms_20_filled_binned = pd.concat(alarms_20_filled_binned)
@@ -791,7 +812,7 @@ def full_calculation(period):
         alarms_result_sum['TimeOff'].dt.month == period_month)
 
     alarms_result_sum = alarms_result_sum.loc[mask]
-    
+
     pool.close()
 
     # Binning alarms (old method)
@@ -995,9 +1016,8 @@ def full_calculation(period):
         # if at least 3 of these conditions are true
         mask_1 = ((
             cnt_115_final['wtc_AcWindSp_mean'] < 4.5) & ((
-                cnt_115_final[('met_WindSpeedRot_mean', 246)] < 6) | (
-                cnt_115_final[('met_WindSpeedRot_mean', 38)] < 6) | (
-                cnt_115_final[('met_WindSpeedRot_mean', 39)] < 6))) & (
+                cnt_115_final[('met_WindSpeedRot_mean', 38)] < 7.5) | (
+                cnt_115_final[('met_WindSpeedRot_mean', 39)] < 7.5))) & (
             cnt_115_final['EL_indefini'] > 0)
 
         mask_2 = mask_1.shift().bfill()
