@@ -154,15 +154,34 @@ def upsample(df_group, period):
     return result
 
 
-def alarms_to_10min(alarms_df_clean_tur, period, next_period):
+# def alarms_to_10min(alarms_df_clean_tur, period, next_period):
+
+#     last_df = pd.DataFrame()
+#     for i, j in alarms_df_clean_tur.iterrows():
+#         full_range = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
+#                                    pd.Timestamp(
+#                                        f'{next_period}-01 00:00:00.000'),
+#                                    freq='10T')
+#         df = pd.DataFrame(index=full_range)
+#         new_j = pd.DataFrame(j).T
+#         df = df.loc[(df.index >= j.NewTimeOn) & (
+#             df.index <= (j.TimeOff + pd.Timedelta(minutes=10)))]
+#         df = pd.concat([df, new_j]).bfill()
+#         df.drop(df.tail(1).index, inplace=True)
+#         last_df = pd.concat([last_df, df])
+
+#     return last_df[['TimeOn', 'TimeOff', 'Alarmcode',
+#                     'UK Text', 'Error Type', 'NewTimeOn']]
+
+
+def alarms_to_10min(df_group, full_range_var):
+
+    StationId, alarms_df_clean_tur = df_group
 
     last_df = pd.DataFrame()
     for i, j in alarms_df_clean_tur.iterrows():
-        full_range = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
-                                   pd.Timestamp(
-                                       f'{next_period}-01 00:00:00.000'),
-                                   freq='10T')
-        df = pd.DataFrame(index=full_range)
+        
+        df = pd.DataFrame(index=full_range_var)
         new_j = pd.DataFrame(j).T
         df = df.loc[(df.index >= j.NewTimeOn) & (
             df.index <= (j.TimeOff + pd.Timedelta(minutes=10)))]
@@ -170,7 +189,9 @@ def alarms_to_10min(alarms_df_clean_tur, period, next_period):
         df.drop(df.tail(1).index, inplace=True)
         last_df = pd.concat([last_df, df])
 
-    return last_df[['TimeOn', 'TimeOff', 'Alarmcode',
+    last_df['StationId'] = StationId
+
+    return last_df[['StationId','TimeOn', 'TimeOff', 'Alarmcode',
                     'UK Text', 'Error Type', 'NewTimeOn']]
 
     # -------------------------------------------------------------------------
@@ -184,14 +205,14 @@ def realperiod_10mins(last_df):
     mask_siemens = last_df['Error Type'] == 1
     mask_tarec = last_df['Error Type'] == 0
 
-    df_TimeOn = last_df['NewTimeOn'].reset_index()
-    df_TimeOff = last_df['TimeOff'].reset_index()
+    df_TimeOn = last_df['TimeStamp','NewTimeOn']
+    df_TimeOff = last_df['TimeStamp', 'TimeOff']
 
-    df_TimeOn['level_1'] = df_TimeOn['level_1'] - pd.Timedelta(minutes=10)
+    df_TimeOn['TimeStamp'] = df_TimeOn['TimeStamp'] - pd.Timedelta(minutes=10)
 
-    last_df['10minTimeOn'] = df_TimeOn[['level_1', 'NewTimeOn']].max(1).values
+    last_df['10minTimeOn'] = df_TimeOn[['TimeStamp', 'NewTimeOn']].max(1).values
 
-    last_df['10minTimeOff'] = df_TimeOff[['level_1', 'TimeOff']].min(1).values
+    last_df['10minTimeOff'] = df_TimeOff[['TimeStamp', 'TimeOff']].min(1).values
 
     last_df['RealPeriod'] = last_df['10minTimeOff'] - last_df['10minTimeOn']
 
@@ -392,7 +413,7 @@ def fill_115(alarms, period, alarms_result_sum):
                                                          alarms_result_sum))
         alarms_115_filled_rows.reset_index(inplace=True)
         alarms_115_filled_rows = alarms_115_filled_rows.drop(
-            'level_1', axis=1)
+            'TimeStamp', axis=1)
 
         missing_115 = alarms_115_filled_rows.groupby('StationNr').apply(
             lambda df: df.loc[((
@@ -540,7 +561,7 @@ def fill_20(alarms, period, alarms_result_sum):
 
         alarms_20_filled_rows.reset_index(inplace=True)
         alarms_20_filled_rows = alarms_20_filled_rows.drop(
-            'level_1', axis=1)
+            'TimeStamp', axis=1)
 
         missing_20 = alarms_20_filled_rows.groupby('StationNr').apply(
             lambda df: df.loc[((
@@ -694,17 +715,27 @@ class read_files():
         return met
 
     @staticmethod
+    def read_din(period):
+        usecols_din = '''TimeStamp, StationId, wtc_PowerRed_counts'''
+
+        sql_din = f"Select {usecols_din} FROM tblSCTurDigiIn;"
+
+        din = zip_to_df('din', sql_din, period)
+
+        return din
+
+    @staticmethod
     def read_all(period):
 
         return (read_files.read_met(period), read_files.read_tur(period),
                 read_files.read_sum(period), read_files.read_cnt(period),
-                read_files.read_grd(period))
+                read_files.read_grd(period), read_files.read_din(period))
 
 
 def full_calculation(period):
 
     # reading all files with function
-    met, tur, alarms, cnt, grd = read_files.read_all(period)
+    met, tur, alarms, cnt, grd , din= read_files.read_all(period)
 
     # --------------------------error list-------------------------
     error_list = pd.read_excel(
@@ -728,7 +759,7 @@ def full_calculation(period):
     period_end = f'{next_period}-01 00:00:00.000'
 
     for i in range(1, 4):  # append last 3 months alarms
-        
+
         ith_previous_period_dt = period_dt + relativedelta(months=-i)
         ith_previous_period = ith_previous_period_dt.strftime("%Y-%m")
 
@@ -744,8 +775,8 @@ def full_calculation(period):
     print('Keep only alarms in period')
 
     alarms = alarms.query('(@period_start < TimeOn < @period_end) | \
-						   (@period_start < TimeOff < @period_end) | \
-	  					   ((TimeOn < @period_start) & (@period_end < TimeOff))')
+                           (@period_start < TimeOff < @period_end) | \
+                           ((TimeOn < @period_start) & (@period_end < TimeOff))')
 
     # ------------------------------------------------------
 
@@ -768,7 +799,7 @@ def full_calculation(period):
     print('Cascading done')
 
     # ----------------openning pool for multiprocessing------------------------
-    pool = mp.Pool(processes=(mp.cpu_count() - 1))
+    pool = mp.Pool(processes=(mp.cpu_count()))
 
     # ------------------115 filling binning -----------------------------------
 
@@ -813,7 +844,6 @@ def full_calculation(period):
 
     alarms_result_sum = alarms_result_sum.loc[mask]
 
-    pool.close()
 
     # Binning alarms (old method)
 
@@ -830,6 +860,11 @@ def full_calculation(period):
 
     # Binning alarms and remove overlap with 1005 (new method)
 
+    full_range_var = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
+                               pd.Timestamp(
+                                   f'{next_period}-01 00:00:00.000'),
+                               freq='10T')
+
     alarms_df_clean = alarms_result_sum.loc[(
         alarms_result_sum['RealPeriod'].dt.total_seconds() != 0)].copy()
 
@@ -838,13 +873,38 @@ def full_calculation(period):
     alarms_df_1005['TimeOff'] = alarms_df_1005['NewTimeOn']
     alarms_df_1005['NewTimeOn'] = alarms_df_1005['TimeOn']
 
-    alarms_df_clean_10min = alarms_df_clean.groupby(
-        'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+    # alarms_df_clean_10min = alarms_df_clean.groupby(
+    #     'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+
+    grp_lst_args = iter([(n, full_range_var)
+                         for n in alarms_df_clean.groupby('StationNr')])
+
+    alarms_df_clean_10min = pool.starmap(alarms_to_10min, grp_lst_args)
+
+    alarms_df_clean_10min = pd.concat(alarms_df_clean_10min)
+
+    alarms_df_clean_10min.reset_index(inplace=True)
+    alarms_df_clean_10min.rename(columns={'index': 'TimeStamp'}, inplace=True)
+
 
     alarms_df_clean_10min = realperiod_10mins(alarms_df_clean_10min)
 
-    alarms_df_1005_10min = alarms_df_1005.groupby(
-        'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+    # alarms_df_1005_10min = alarms_df_1005.groupby(
+    #     'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+
+
+    grp_lst_args = iter([(n, full_range_var)
+                         for n in alarms_df_1005.groupby('StationNr')])
+
+    print('binning 1005')
+
+    alarms_df_1005_10min = pool.starmap(alarms_to_10min, grp_lst_args)
+
+    alarms_df_1005_10min = pd.concat(alarms_df_1005_10min)
+
+    alarms_df_1005_10min.reset_index(inplace=True)
+    alarms_df_1005_10min.rename(columns={'index': 'TimeStamp'}, inplace=True)
+
     alarms_df_1005_10min = realperiod_10mins(alarms_df_1005_10min)
 
     alarms_df_clean_10min.reset_index(inplace=True)
@@ -855,7 +915,7 @@ def full_calculation(period):
                                     ['StationNr', '10minTimeOn']).reset_index()
 
     merged_last_df = merged_last_df.drop(
-        'index', axis=1).rename(columns={'level_1': 'TimeStamp'})
+        'index', axis=1).rename(columns={'TimeStamp': 'TimeStamp'})
 
     df = merged_last_df.groupby('StationNr').apply(
         lambda df: remove_1005_overlap(df, df.name, alarms_df_1005_10min))
@@ -877,7 +937,7 @@ def full_calculation(period):
         .groupby('StationNr')
         .apply(lambda df: full_range(df, period, next_period))
         .reset_index()
-        .rename(columns={'level_1': 'TimeStamp',
+        .rename(columns={'TimeStamp': 'TimeStamp',
                          'StationNr': 'StationId',
                          'Period Tarec(s)': 'Period 0(s)',
                          'Period Siemens(s)': 'Period 1(s)'}))
@@ -888,6 +948,10 @@ def full_calculation(period):
                                     .dt.total_seconds())
     alarms_binned['RealPeriod'] = (alarms_binned['RealPeriod']
                                    .dt.total_seconds())
+
+    
+    pool.close()
+
 
     print('Alarms Binned')
 
@@ -930,6 +994,11 @@ def full_calculation(period):
                        on='TimeStamp',
                        how='left')
 
+    # merging last dataframe with curtailement
+    cnt_115 = pd.merge(cnt_115, din,
+                       on=['StationId', 'TimeStamp'],
+                       how='left')
+
     cnt_115 = cnt_115.fillna(0)
 
     # -------- operational turbines mask --------------------------------------
@@ -938,7 +1007,9 @@ def full_calculation(period):
         cnt_115['Period 1(s)'] == 0) & (
         cnt_115['wtc_ActPower_min'] > 0) & (
         cnt_115['Duration 115(s)'] == 0) & (
-        cnt_115['Duration 20-25(s)'] == 0)
+        cnt_115['Duration 20-25(s)'] == 0) & (
+        cnt_115['wtc_PowerRed_counts'] == 0
+        )
     )
 
     # -------- operational turbines -------------------------------------------
@@ -1008,16 +1079,25 @@ def full_calculation(period):
         [(cnt_115_final['ELX'] + cnt_115_final['ELNX']),
          cnt_115_final['EL 115']], axis=1).max(axis=1)
 
-    cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - max_115_ELX_ELNX
+    cnt_115_final['EL_indefini'] = (cnt_115_final['EL'] - max_115_ELX_ELNX)
+
+    # -------------------------------------------------------------------------
+
+    cnt_115_final['prev_AcWindSp'] = cnt_115_final.groupby(
+        'TimeStamp')['wtc_AcWindSp_mean'].shift()
+
+    cnt_115_final['next_AcWindSp'] = cnt_115_final.groupby(
+        'TimeStamp')['wtc_AcWindSp_mean'].shift(-1)
+
     # -------------------------------------------------------------------------
 
     def lowind(cnt_115_final):
 
         # if at least 3 of these conditions are true
         mask_1 = ((
-            cnt_115_final['wtc_AcWindSp_mean'] < 4.5) & ((
-                cnt_115_final[('met_WindSpeedRot_mean', 38)] < 7.5) | (
-                cnt_115_final[('met_WindSpeedRot_mean', 39)] < 7.5))) & (
+            cnt_115_final['wtc_AcWindSp_mean'] < 5.5) & ((
+                cnt_115_final['prev_AcWindSp'] < 5.5) | (
+                cnt_115_final['next_AcWindSp'] < 5.5))) & (
             cnt_115_final['EL_indefini'] > 0)
 
         mask_2 = mask_1.shift().bfill()
@@ -1051,10 +1131,23 @@ def full_calculation(period):
 
     cnt_115_final = cnt_115_final.groupby('StationId').apply(lowind).fillna(0)
 
+
     cnt_115_final['EL_indefini_left'] = cnt_115_final['EL_indefini'] - (
         cnt_115_final['EL_wind'] +
         cnt_115_final['EL_wind_start'] +
         cnt_115_final['EL_alarm_start'])
+
+    # -------------------------------------------------------------------------
+
+    mask_4 = (cnt_115_final['EL_indefini_left'] > 0) & (
+        cnt_115_final['wtc_PowerRed_counts'] > 0)
+
+    cnt_115_final.loc[mask_4, 'EL_PowerRed'] = cnt_115_final.loc[mask_4, 'EL_indefini_left']
+
+    cnt_115_final['EL_PowerRed'] = cnt_115_final['EL_PowerRed'].fillna(0)
+
+    cnt_115_final['EL_indefini_left'] = cnt_115_final['EL_indefini_left'] - cnt_115_final['EL_PowerRed']
+
     # -------------------------------------------------------------------------
 
     Ep = cnt_115_final['wtc_kWG1TotE_accum'].sum()
@@ -1082,4 +1175,4 @@ def full_calculation(period):
 
 
 # if __name__ == '__main__':
-#     full_calculation('2020-03')
+#     full_calculation('2020-07')
