@@ -97,7 +97,7 @@ layout = html.Div([
                  html.Div(  # wrapped because of styling problmes in dropdown
                      dcc.Dropdown(id='calculation_selection_dropdown',
                                   options=[{'label': i,
-                                            'value': i} for i in directories],
+                                            'value': i} for i in directories],                                  
                                   style={}),
                      style={'width': '60%', 'placeSelf': 'center'},
         ),
@@ -207,15 +207,16 @@ def callback_calcul(value):
 
     Results.to_csv(
         f'./monthly_data/results/{value}-Availability.csv',
-        decimal=',', sep=';')
+        decimal=',', sep=';', index=False)
 
     Results = Results[['StationId', 'wtc_kWG1TotE_accum', 'Epot',
                        'EL', 'EL 115', 'ELX', 'ELNX', 'EL_115_left',
                        'EL_indefini', 'EL_wind', 'EL_wind_start',
                        'EL_alarm_start', 'EL_indefini_left',
                        'Period 1(s)', 'Period 0(s)', 'Duration 115(s)',
-                       'Duration 20-25(s)', 'Duration lowind(s)',
-                       'Duration lowind_start(s)', 'Duration alarm_start(s)']]
+                       'Duration 20-25(s)', 'Duration lowind(s)','EL_2006',
+                       'Duration lowind_start(s)', 'Duration alarm_start(s)',
+                       'EL_Misassigned', 'EL_PowerRed']]
 
     Results_grouped = round(
         Results.groupby('StationId').sum().reset_index(), 2)
@@ -224,24 +225,19 @@ def callback_calcul(value):
     EL = Results_grouped['EL']
     ELX = Results_grouped['ELX']
     ELNX = Results_grouped['ELNX']
+    EL_2006 = Results_grouped['EL_2006']
 
     EL_wind = Results_grouped['EL_wind']
     EL_wind_start = Results_grouped['EL_wind_start']
     EL_alarm_start = Results_grouped['EL_alarm_start']
 
-    MAA_result = 100 * (Ep + ELX) / (Ep + ELX + ELNX)
+    Results_grouped['MAA'] = 100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006)
 
-    MAA_indefini = 100 * (Ep + ELX) / (Ep + EL)
+    Results_grouped['MAA_indefini'] = 100 * (Ep + ELX) / (Ep + EL)
 
-    MAA_indefni_adjusted = 100 * (
+    Results_grouped['MAA_indefni_adjusted'] = 100 * (
         Ep + ELX) / (
             Ep + EL - (EL_wind + EL_wind_start + EL_alarm_start))
-
-    Results_grouped['MAA'] = MAA_result
-
-    Results_grouped['MAA_indefini'] = MAA_indefini
-
-    Results_grouped['MAA_indefni_adjusted'] = MAA_indefni_adjusted
 
     Results_grouped.index = Results_grouped.index + 1
 

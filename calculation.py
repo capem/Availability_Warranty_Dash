@@ -1,5 +1,6 @@
 from dateutil.relativedelta import relativedelta
 from datetime import datetime as dt
+from pandas.core.indexing import is_nested_tuple
 import pyodbc
 from zipfile import ZipFile
 import os
@@ -11,12 +12,9 @@ import pandas as pd
 def zip_to_df(data_type, sql, period):
 
     file_name = f'{period}-{data_type}'
-    print(f'Extracting {file_name}')
 
     ZipFile(f'./monthly_data/uploads/{period}/{file_name}.zip',
             'r').extractall(f'./monthly_data/uploads/{period}/')
-
-    print(f'{data_type} Extracted - Loading')
 
     conn_str = (
         r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
@@ -27,7 +25,6 @@ def zip_to_df(data_type, sql, period):
 
     df = pd.read_sql(sql, cnxn)
 
-    print(f'{data_type} Loaded')
     return df
 
 
@@ -154,6 +151,7 @@ def upsample(df_group, period):
     return result
 
 
+<<<<<<< Updated upstream
 # def alarms_to_10min(alarms_df_clean_tur, period, next_period):
 
 #     last_df = pd.DataFrame()
@@ -181,6 +179,15 @@ def alarms_to_10min(df_group, full_range_var):
     last_df = pd.DataFrame()
     for i, j in alarms_df_clean_tur.iterrows():
         
+=======
+def alarms_to_10min(df_group, full_range_var):
+
+    StationNr, alarms_df_clean_tur = df_group
+
+    last_df = pd.DataFrame()
+    for i, j in alarms_df_clean_tur.iterrows():
+
+>>>>>>> Stashed changes
         df = pd.DataFrame(index=full_range_var)
         new_j = pd.DataFrame(j).T
         df = df.loc[(df.index >= j.NewTimeOn) & (
@@ -189,12 +196,21 @@ def alarms_to_10min(df_group, full_range_var):
         df.drop(df.tail(1).index, inplace=True)
         last_df = pd.concat([last_df, df])
 
+<<<<<<< Updated upstream
     last_df['StationId'] = StationId
 
     return last_df[['StationId','TimeOn', 'TimeOff', 'Alarmcode',
                     'UK Text', 'Error Type', 'NewTimeOn']]
+=======
+    last_df['StationNr'] = StationNr
+
+    return last_df.reindex(columns=['StationNr', 'TimeOn', 'TimeOff', 'Alarmcode',
+                                    'UK Text', 'Error Type', 'NewTimeOn'])
+>>>>>>> Stashed changes
 
     # -------------------------------------------------------------------------
+
+
 
 
 def realperiod_10mins(last_df):
@@ -205,6 +221,7 @@ def realperiod_10mins(last_df):
     mask_siemens = last_df['Error Type'] == 1
     mask_tarec = last_df['Error Type'] == 0
 
+<<<<<<< Updated upstream
     df_TimeOn = last_df['TimeStamp','NewTimeOn']
     df_TimeOff = last_df['TimeStamp', 'TimeOff']
 
@@ -213,6 +230,19 @@ def realperiod_10mins(last_df):
     last_df['10minTimeOn'] = df_TimeOn[['TimeStamp', 'NewTimeOn']].max(1).values
 
     last_df['10minTimeOff'] = df_TimeOff[['TimeStamp', 'TimeOff']].min(1).values
+=======
+    df_TimeOn = last_df[['TimeStamp', 'NewTimeOn']]
+    df_TimeOff = last_df[['TimeStamp', 'TimeOff']]
+
+    df_TimeOn.loc[:, 'TimeStamp'] = df_TimeOn['TimeStamp'] - \
+        pd.Timedelta(minutes=10)
+
+    last_df['10minTimeOn'] = df_TimeOn[[
+        'TimeStamp', 'NewTimeOn']].max(1).values
+
+    last_df['10minTimeOff'] = df_TimeOff[[
+        'TimeStamp', 'TimeOff']].min(1).values
+>>>>>>> Stashed changes
 
     last_df['RealPeriod'] = last_df['10minTimeOff'] - last_df['10minTimeOn']
 
@@ -617,19 +647,17 @@ def upsample_115_20(df_group, period, alarmcode):
 
 class read_files():
 
-    # ------------------------------grd---------------------------------
+    # ------------------------------grd-------------------------------------
     @staticmethod
     def read_grd(period):
-        usecols_grd = '''TimeStamp, StationId, wtc_ActPower_min,
-            wtc_ActPower_max, wtc_ActPower_mean'''
+        usecols_grd = '''TimeStamp, StationId, wtc_ActPower_min, wtc_ActPower_max,
+        wtc_ActPower_mean'''
 
         sql_grd = f"Select {usecols_grd} FROM tblSCTurGrid;"
 
         grd = zip_to_df(data_type='grd', sql=sql_grd, period=period)
         grd['TimeStamp'] = pd.to_datetime(
             grd['TimeStamp'], format='%m/%d/%y %H:%M:%S')
-
-        grd.iloc[:, 2:] = grd.astype(float, errors='ignore')
 
         return grd
 
@@ -662,24 +690,18 @@ class read_files():
         """
         alarms = zip_to_df('sum', usecols_sum, period)
 
-        alarms['TOn'] = sqldate_to_datetime(alarms['TOn'])
-        alarms['TOff'] = sqldate_to_datetime(alarms['TOff'])
+        alarms.loc[:, 'TOn'] = sqldate_to_datetime(alarms['TOn'].copy())
+        alarms.loc[:, 'TOff'] = sqldate_to_datetime(alarms['TOff'].copy())
 
         alarms.rename(columns={'TOn': 'TimeOn',
                                'TOff': 'TimeOff'}, inplace=True)
-
         alarms = alarms[alarms.StationNr >= 2307405]
-
         alarms = alarms[
             alarms.StationNr <= 2307535].reset_index(
             drop=True)
-
         alarms.dropna(subset=['Alarmcode'], inplace=True)
-
         alarms.reset_index(drop=True, inplace=True)
-
-        alarms.Alarmcode = alarms.Alarmcode.astype(int)
-
+        alarms['Alarmcode'] = alarms.Alarmcode.astype(int)
         return alarms
 
     # ------------------------------tur---------------------------
@@ -712,11 +734,18 @@ class read_files():
 
         met.reset_index(inplace=True)
 
+        met.columns = ['_'.join(str(v) for v in tup) if type(
+            tup) is tuple else tup for tup in met.columns]
+
         return met
 
     @staticmethod
     def read_din(period):
+<<<<<<< Updated upstream
         usecols_din = '''TimeStamp, StationId, wtc_PowerRed_counts'''
+=======
+        usecols_din = '''TimeStamp, StationId, wtc_PowerRed_timeon'''
+>>>>>>> Stashed changes
 
         sql_din = f"Select {usecols_din} FROM tblSCTurDigiIn;"
 
@@ -735,7 +764,39 @@ class read_files():
 def full_calculation(period):
 
     # reading all files with function
+<<<<<<< Updated upstream
     met, tur, alarms, cnt, grd , din= read_files.read_all(period)
+=======
+    met, tur, alarms, cnt, grd, din = read_files.read_all(period)
+
+    # ----------------------Sanity check---------------------------
+    sanity_grd = grd.query(
+        '''-1000 <= wtc_ActPower_min <= 3000 & -1000 <= wtc_ActPower_max <= 3000 & -1000 <= wtc_ActPower_mean <= 3000''').index
+    sanity_cnt = cnt.query(
+        '''-500 <= wtc_kWG1Tot_accum <= 500 & 0 <= wtc_kWG1TotE_accum <= 500''').index
+    sanity_tur = tur.query(
+        '''0 <= wtc_AcWindSp_mean <= 50 & 0 <= wtc_ActualWindDirection_mean <= 360''').index
+    # sanity_met = met.query('''0 <= met_WindSpeedRot_mean <= 50 & 0 <= met_WinddirectionRot_mean <= 360''').index
+    sanity_din = din.query('''0 <= wtc_PowerRed_timeon <= 600''').index
+
+    grd_outliers = grd.loc[grd.index.difference(sanity_grd)]
+    cnt_outliers = cnt.loc[cnt.index.difference(sanity_cnt)]
+    tur_outliers = tur.loc[tur.index.difference(sanity_tur)]
+    # met_outliers = met.loc[met.index.difference(sanity_met)]
+    din_outliers = din.loc[din.index.difference(sanity_din)]
+
+    with pd.ExcelWriter(f'./monthly_data/results/outliers/{period}_outliers.xlsx') as writer:
+        grd_outliers.to_excel(writer, sheet_name='grd')
+        cnt_outliers.to_excel(writer, sheet_name='cnt')
+        tur_outliers.to_excel(writer, sheet_name='tur')
+        din_outliers.to_excel(writer, sheet_name='din')
+
+    grd = grd.loc[grd.index.isin(sanity_grd)]
+    cnt = cnt.loc[cnt.index.isin(sanity_cnt)]
+    tur = tur.loc[tur.index.isin(sanity_tur)]
+    # met = met.loc[met.index.isin(sanity_met)]
+    din = din.loc[din.index.isin(sanity_din)]
+>>>>>>> Stashed changes
 
     # --------------------------error list-------------------------
     error_list = pd.read_excel(
@@ -755,8 +816,8 @@ def full_calculation(period):
     next_period_dt = period_dt + relativedelta(months=1)
     next_period = next_period_dt.strftime("%Y-%m")
 
-    period_start = f'{period}-01 00:10:00.000'
-    period_end = f'{next_period}-01 00:00:00.000'
+    period_start = pd.Timestamp(f'{period}-01 00:10:00.000')
+    period_end = pd.Timestamp(f'{next_period}-01 00:10:00.000')
 
     for i in range(1, 4):  # append last 3 months alarms
 
@@ -770,6 +831,7 @@ def full_calculation(period):
         except FileNotFoundError:
             print(f'Previous mounth -{i} alarms File not found')
 
+<<<<<<< Updated upstream
     # ------------------------------Keep only alarms in period------------------------
 
     print('Keep only alarms in period')
@@ -778,8 +840,9 @@ def full_calculation(period):
                            (@period_start < TimeOff < @period_end) | \
                            ((TimeOn < @period_start) & (@period_end < TimeOff))')
 
+=======
+>>>>>>> Stashed changes
     # ------------------------------------------------------
-
     ''' label scada alarms with coresponding error type
     and only keep alarm codes in error list'''
     result_sum = pd.merge(alarms, error_list[[
@@ -789,6 +852,21 @@ def full_calculation(period):
 
     # Remove warnings
     result_sum = result_sum.loc[result_sum['Error Type'] != 'W']
+
+    # ------------------------------Fill NA TimeOff-------------------------------------
+    result_sum.TimeOff.fillna(period_end, inplace=True)
+    # ------------------------------Keep only alarms in period--------------------------
+
+    print('Keep only alarms in period')
+
+    full_range_var = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
+                                   pd.Timestamp(
+        f'{next_period}-01 00:00:00.000'),
+        freq='10T')
+
+    result_sum = result_sum.query('(@period_start < TimeOn < @period_end) | \
+                                   (@period_start < TimeOff < @period_end) | \
+                                   ((TimeOn < @period_start) & (@period_end < TimeOff))')
 
     # Determine alarms real periods applying cascade method
 
@@ -800,7 +878,50 @@ def full_calculation(period):
 
     # ----------------openning pool for multiprocessing------------------------
     pool = mp.Pool(processes=(mp.cpu_count()))
+<<<<<<< Updated upstream
+=======
 
+    # -------------------2006  binning --------------------------------------
+
+    print('binning 2006')
+
+    alarms_df_2006 = alarms.loc[
+        (alarms['Alarmcode'] == 2006)].copy()
+    # alarms_df_2006['TimeOff'] = alarms_df_2006['NewTimeOn']
+    alarms_df_2006['NewTimeOn'] = alarms_df_2006['TimeOn']
+
+    if not alarms_df_2006.empty:
+        grp_lst_args = iter([(n, full_range_var)
+                             for n in alarms_df_2006.groupby('StationNr')])
+
+        alarms_df_2006_10min = pool.starmap(alarms_to_10min, grp_lst_args)
+
+        alarms_df_2006_10min = pd.concat(alarms_df_2006_10min)
+
+        alarms_df_2006_10min.reset_index(inplace=True)
+        alarms_df_2006_10min.rename(
+            columns={'index': 'TimeStamp'}, inplace=True)
+
+        alarms_df_2006_10min = realperiod_10mins(alarms_df_2006_10min)
+
+        alarms_df_2006_10min = (alarms_df_2006_10min.groupby('TimeStamp')
+                                                    .agg({"RealPeriod": 'sum',
+                                                          'StationNr': 'first'}))
+
+        alarms_df_2006_10min.reset_index(inplace=True)
+>>>>>>> Stashed changes
+
+        alarms_df_2006_10min.rename(columns={'StationNr': 'StationId',
+                                             'RealPeriod': 'Duration 2006(s)'},
+                                    inplace=True)
+
+        alarms_df_2006_10min['Duration 2006(s)'] = alarms_df_2006_10min[
+            'Duration 2006(s)'].dt.total_seconds()
+
+    else:
+        print('no 2006')
+        alarms_df_2006_10min = pd.DataFrame(columns={'TimeStamp', 'Duration 2006(s)',
+                                                     'StationId'})
     # ------------------115 filling binning -----------------------------------
 
     print('filling 115')
@@ -844,10 +965,14 @@ def full_calculation(period):
 
     alarms_result_sum = alarms_result_sum.loc[mask]
 
-
-    # Binning alarms (old method)
+<<<<<<< Updated upstream
+=======
+    # ----------------------- binning --------------------------------------
+>>>>>>> Stashed changes
 
     print('Binning')
+    # Binning alarms (old method)
+
     # grp_lst_args = iter([(n, period)
     #                      for n in alarms_result_sum.groupby('StationNr')])
 
@@ -868,11 +993,6 @@ def full_calculation(period):
     alarms_df_clean = alarms_result_sum.loc[(
         alarms_result_sum['RealPeriod'].dt.total_seconds() != 0)].copy()
 
-    alarms_df_1005 = alarms_result_sum.loc[
-        (alarms_result_sum['Alarmcode'] == 1005)].copy()
-    alarms_df_1005['TimeOff'] = alarms_df_1005['NewTimeOn']
-    alarms_df_1005['NewTimeOn'] = alarms_df_1005['TimeOn']
-
     # alarms_df_clean_10min = alarms_df_clean.groupby(
     #     'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
 
@@ -886,9 +1006,45 @@ def full_calculation(period):
     alarms_df_clean_10min.reset_index(inplace=True)
     alarms_df_clean_10min.rename(columns={'index': 'TimeStamp'}, inplace=True)
 
-
     alarms_df_clean_10min = realperiod_10mins(alarms_df_clean_10min)
+    alarms_df_clean_10min.reset_index(inplace=True)
 
+    # -------------------1005  binning --------------------------------------
+
+    print('binning 1005')
+
+    alarms_df_1005 = alarms_result_sum.loc[
+        (alarms_result_sum['Alarmcode'] == 1005)].copy()
+    alarms_df_1005['TimeOff'] = alarms_df_1005['NewTimeOn']
+    alarms_df_1005['NewTimeOn'] = alarms_df_1005['TimeOn']
+
+<<<<<<< Updated upstream
+    # alarms_df_clean_10min = alarms_df_clean.groupby(
+    #     'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
+
+    grp_lst_args = iter([(n, full_range_var)
+                         for n in alarms_df_clean.groupby('StationNr')])
+
+    alarms_df_clean_10min = pool.starmap(alarms_to_10min, grp_lst_args)
+
+    alarms_df_clean_10min = pd.concat(alarms_df_clean_10min)
+
+    alarms_df_clean_10min.reset_index(inplace=True)
+    alarms_df_clean_10min.rename(columns={'index': 'TimeStamp'}, inplace=True)
+
+=======
+    grp_lst_args = iter([(n, full_range_var)
+                         for n in alarms_df_1005.groupby('StationNr')])
+>>>>>>> Stashed changes
+
+    alarms_df_1005_10min = pool.starmap(alarms_to_10min, grp_lst_args)
+
+    alarms_df_1005_10min = pd.concat(alarms_df_1005_10min)
+
+    alarms_df_1005_10min.reset_index(inplace=True)
+    alarms_df_1005_10min.rename(columns={'index': 'TimeStamp'}, inplace=True)
+
+<<<<<<< Updated upstream
     # alarms_df_1005_10min = alarms_df_1005.groupby(
     #     'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
 
@@ -905,10 +1061,15 @@ def full_calculation(period):
     alarms_df_1005_10min.reset_index(inplace=True)
     alarms_df_1005_10min.rename(columns={'index': 'TimeStamp'}, inplace=True)
 
+=======
+>>>>>>> Stashed changes
     alarms_df_1005_10min = realperiod_10mins(alarms_df_1005_10min)
 
-    alarms_df_clean_10min.reset_index(inplace=True)
     alarms_df_1005_10min.reset_index(inplace=True)
+
+    pool.close()
+
+    # ------------------------------------------------------------
 
     merged_last_df = pd.concat([alarms_df_clean_10min,
                                 alarms_df_1005_10min]).sort_values(
@@ -954,6 +1115,12 @@ def full_calculation(period):
 
 
     print('Alarms Binned')
+
+    # ----------Merging with 2006 alarms
+
+    alarms_binned = pd.merge(alarms_binned, alarms_df_2006_10min,
+                             on=['TimeStamp', 'StationId'],
+                             how='left').reset_index(drop=True)
 
     # -------merging cnt, grd, tur, met,upsampled (alarms ,115 and 20/25)------
     # merging upsampled alarms with energy production
@@ -1002,6 +1169,7 @@ def full_calculation(period):
     cnt_115 = cnt_115.fillna(0)
 
     # -------- operational turbines mask --------------------------------------
+<<<<<<< Updated upstream
     mask_n = ((cnt_115['wtc_kWG1TotE_accum'] > 0) & (
         cnt_115['Period 0(s)'] == 0) & (
         cnt_115['Period 1(s)'] == 0) & (
@@ -1011,6 +1179,19 @@ def full_calculation(period):
         cnt_115['wtc_PowerRed_counts'] == 0
         )
     )
+=======
+    mask_n = ((cnt_115['wtc_kWG1TotE_accum'] > 0) &
+              (cnt_115['Period 0(s)'] == 0) &
+              (cnt_115['Period 1(s)'] == 0) &
+              (cnt_115['wtc_ActPower_min'] > 0) &
+
+              ((cnt_115['Duration 115(s)'] == 0) | (cnt_115['wtc_ActPower_min'] > 0)) &
+              ((cnt_115['Duration 20-25(s)'] == 0) | (cnt_115['wtc_ActPower_min'] > 0)) &
+
+              (cnt_115['Duration 2006(s)'] == 0) &
+              (cnt_115['wtc_PowerRed_timeon'] == 0)
+              )
+>>>>>>> Stashed changes
 
     # -------- operational turbines -------------------------------------------
     cnt_115_n = cnt_115.loc[mask_n].copy()
@@ -1021,7 +1202,7 @@ def full_calculation(period):
     Epot = cnt_115_n.groupby(
         'TimeStamp').agg({'wtc_kWG1TotE_accum': ep_cf,
                           'Correction Factor': cf_column,
-                          'Available Turbines': 'count'})
+                          'Available Turbines': 'count'}).copy()
 
     Epot = Epot.rename(columns={'wtc_kWG1TotE_accum': 'Epot'})
 
@@ -1079,7 +1260,11 @@ def full_calculation(period):
         [(cnt_115_final['ELX'] + cnt_115_final['ELNX']),
          cnt_115_final['EL 115']], axis=1).max(axis=1)
 
+<<<<<<< Updated upstream
     cnt_115_final['EL_indefini'] = (cnt_115_final['EL'] - max_115_ELX_ELNX)
+=======
+    cnt_115_final['EL_indefini'] = cnt_115_final['EL'] - max_115_ELX_ELNX
+>>>>>>> Stashed changes
 
     # -------------------------------------------------------------------------
 
@@ -1089,48 +1274,136 @@ def full_calculation(period):
     cnt_115_final['next_AcWindSp'] = cnt_115_final.groupby(
         'TimeStamp')['wtc_AcWindSp_mean'].shift(-1)
 
+<<<<<<< Updated upstream
+=======
+    cnt_115_final['prev_ActPower'] = cnt_115_final.groupby(
+        'TimeStamp')['wtc_ActPower_mean'].shift()
+
+    cnt_115_final['next_ActPower'] = cnt_115_final.groupby(
+        'TimeStamp')['wtc_ActPower_mean'].shift(-1)
+
+    cnt_115_final['prev_Alarme'] = cnt_115_final.groupby(
+        'TimeStamp')['RealPeriod'].shift()
+
+    cnt_115_final['next_Alarme'] = cnt_115_final.groupby(
+        'TimeStamp')['RealPeriod'].shift(-1)
+
+    cnt_115_final['DiffV1'] = (
+        cnt_115_final.prev_AcWindSp - cnt_115_final.wtc_AcWindSp_mean)
+
+    cnt_115_final['DiffV2'] = (
+        cnt_115_final.next_AcWindSp - cnt_115_final.wtc_AcWindSp_mean)
+
+    # -------------------------------------------------------------------------
+
+    mask_4 = (cnt_115_final['EL_indefini'] > 0) & (
+        cnt_115_final['wtc_PowerRed_timeon'] > 0)  # & warning 2006 > 0
+
+    cnt_115_final.loc[mask_4,
+                      'EL_PowerRed'] = cnt_115_final.loc[mask_4, 'EL_indefini']
+
+    cnt_115_final['EL_PowerRed'] = cnt_115_final['EL_PowerRed'].fillna(0)
+
+    cnt_115_final['EL_indefini'] = cnt_115_final['EL_indefini'].fillna(0) - \
+        cnt_115_final['EL_PowerRed']
+
+    cnt_115_final['EL_PowerRed'].fillna(0, inplace=True)
+
+    # -------------------------------------------------------------------------
+
+    mask_5 = (cnt_115_final['EL_indefini'] > 0) & (
+        cnt_115_final['Duration 2006(s)'] > 0)  # & warning 2006 > 0
+
+    cnt_115_final.loc[mask_5,
+                      'EL_2006'] = cnt_115_final.loc[mask_5, 'EL_indefini']
+
+    cnt_115_final['EL_2006'] = cnt_115_final['EL_2006'].fillna(0)
+
+    cnt_115_final['EL_indefini'] = cnt_115_final['EL_indefini'].fillna(0) - \
+        cnt_115_final['EL_2006']
+
+>>>>>>> Stashed changes
     # -------------------------------------------------------------------------
 
     def lowind(cnt_115_final):
 
+        etape1 = ((df.DiffV1 > 1) &
+                  (df.DiffV2 > 1) &
+                  ((df.prev_AcWindSp >= 5) |
+                   (df.next_AcWindSp >= 5) |
+                   (df.wtc_AcWindSp_mean >= 5)))
+
         # if at least 3 of these conditions are true
+<<<<<<< Updated upstream
         mask_1 = ((
             cnt_115_final['wtc_AcWindSp_mean'] < 5.5) & ((
                 cnt_115_final['prev_AcWindSp'] < 5.5) | (
                 cnt_115_final['next_AcWindSp'] < 5.5))) & (
             cnt_115_final['EL_indefini'] > 0)
+=======
+        mask_1 = (((df['wtc_AcWindSp_mean'] < 5.5) &
+                   ((df['prev_AcWindSp'] < 5.5) |
+                    (df['next_AcWindSp'] < 5.5))) &
+                  (df['EL_indefini'] > 0)
+                  )
+
+        mask_1bis = (
+            etape1 & (((df.prev_ActPower_min > 0) & (df.next_ActPower_min > 0)) |
+                      ((df.prev_ActPower_min > 0) & (df.next_Alarme > 0)) |
+                      ((df.next_ActPower_min > 0) & (df.prev_Alarme > 0))))
+>>>>>>> Stashed changes
 
         mask_2 = mask_1.shift().bfill()
 
-        cnt_115_final.loc[mask_1,
-                          'EL_wind'] = cnt_115_final.loc[
-                              mask_1, 'EL_indefini'].fillna(0)
+        df.loc[mask_1, 'EL_wind'] = df.loc[mask_1, 'EL_indefini'].fillna(0)
 
-        cnt_115_final.loc[mask_1,
-                          'Duration lowind(s)'] = 600
+        df.loc[mask_1, 'Duration lowind(s)'] = 600
 
-        cnt_115_final.loc[mask_2 & ~mask_1, 'EL_wind_start'] = (
-            cnt_115_final.loc[mask_2 & ~mask_1, 'EL_indefini']).fillna(0)
+        df.loc[mask_2 & ~mask_1, 'EL_wind_start'] = (
+            df.loc[mask_2 & ~mask_1, 'EL_indefini']).fillna(0)
 
-        cnt_115_final.loc[mask_2 & ~mask_1, 'Duration lowind_start(s)'] = 600
+        df.loc[mask_2 & ~mask_1, 'Duration lowind_start(s)'] = 600
         # ---------------------------------------------------------------------
 
-        mask_3 = ((
-            cnt_115_final['Duration 115(s)'] > 0).shift() & (
-            cnt_115_final['EL_indefini'] > 0) & (
-            cnt_115_final['Duration 115(s)'] == 0))
+        mask_3 = ((df['Duration 115(s)'] > 0).shift() &
+                  (df['EL_indefini'] > 0) &
+                  (df['Duration 115(s)'] == 0))
 
-        cnt_115_final.loc[~mask_1 & ~mask_2 & mask_3, 'EL_alarm_start'] = (
-            cnt_115_final.loc[
-                ~mask_1 & ~mask_2 & mask_3, 'EL_indefini']).fillna(0)
+        df.loc[~mask_1 & ~mask_2 & mask_3, 'EL_alarm_start'] = (
+            df.loc[~mask_1 & ~mask_2 & mask_3, 'EL_indefini']).fillna(0)
 
-        cnt_115_final.loc[~mask_1 & ~mask_2 & mask_3,
-                          'Duration alarm_start(s)'] = 600
+        df.loc[~mask_1 & ~mask_2 & mask_3, 'Duration alarm_start(s)'] = 600
 
-        return cnt_115_final
+        return df
 
-    cnt_115_final = cnt_115_final.groupby('StationId').apply(lowind).fillna(0)
+    cnt_115_final = cnt_115_final.groupby('StationId').apply(lowind)
 
+    cnt_115_final['EL_indefini_left'] = cnt_115_final['EL_indefini'].fillna(0) - (
+        cnt_115_final['EL_wind'].fillna(0) +
+        cnt_115_final['EL_wind_start'].fillna(0) +
+        cnt_115_final['EL_alarm_start'].fillna(0))
+
+    # -------------------------------------------------------------------------
+    # # bypass -------------
+    # print('bypassing')
+
+    # cnt_115_final = pd.read_csv(
+    #     f"./monthly_data/results/{period}-Availability.csv",
+    #     decimal=',', sep=';')
+
+    # cnt_115_final['EL_Misassigned'] = 0
+
+    # # #----end bypass
+
+    # ---------Misassigned low wind---------------
+    EL_Misassigned_mask = (cnt_115_final["UK Text"].str.contains("low wind") &
+                           (((cnt_115_final["prev_AcWindSp"] > 5.5) &
+                             (cnt_115_final["next_AcWindSp"] > 5.5)) |
+                            ((cnt_115_final["met_WindSpeedRot_mean_38"] > 7.5) &
+                             (cnt_115_final["met_WindSpeedRot_mean_39"] > 7.5) &
+                             (cnt_115_final["met_WindSpeedRot_mean_246"] > 7.5))))
+
+<<<<<<< Updated upstream
 
     cnt_115_final['EL_indefini_left'] = cnt_115_final['EL_indefini'] - (
         cnt_115_final['EL_wind'] +
@@ -1148,6 +1421,13 @@ def full_calculation(period):
 
     cnt_115_final['EL_indefini_left'] = cnt_115_final['EL_indefini_left'] - cnt_115_final['EL_PowerRed']
 
+=======
+    cnt_115_final.loc[EL_Misassigned_mask,
+                      'EL_Misassigned'] = cnt_115_final.loc[EL_Misassigned_mask,
+                                                            'ELX']
+
+    cnt_115_final['EL_Misassigned'].fillna(0, inplace=True)
+>>>>>>> Stashed changes
     # -------------------------------------------------------------------------
 
     Ep = cnt_115_final['wtc_kWG1TotE_accum'].sum()
@@ -1155,13 +1435,18 @@ def full_calculation(period):
     ELX = cnt_115_final['ELX'].sum()
     ELNX = cnt_115_final['ELNX'].sum()
     Epot = cnt_115_final['Epot'].sum()
+    EL_PowerRed = cnt_115_final['EL_PowerRed'].sum()
     # EL_indefini = cnt_115_final['EL_indefini'].sum()
 
     EL_wind = cnt_115_final['EL_wind'].sum()
     EL_wind_start = cnt_115_final['EL_wind_start'].sum()
     EL_alarm_start = cnt_115_final['EL_alarm_start'].sum()
 
-    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
+    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX),
+                       2)  # + ELNX_bridage
+
+    MAA_result_bridage = round(
+        100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_PowerRed), 2)
 
     MAA_indefini = round(100 * (Ep + ELX) / (Ep + EL), 2)
 
@@ -1174,5 +1459,11 @@ def full_calculation(period):
     return cnt_115_final
 
 
+<<<<<<< Updated upstream
 # if __name__ == '__main__':
 #     full_calculation('2020-07')
+=======
+if __name__ == '__main__':
+
+    full_calculation('2021-04')
+>>>>>>> Stashed changes

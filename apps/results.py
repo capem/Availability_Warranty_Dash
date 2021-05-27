@@ -42,8 +42,12 @@ tab1_content = dbc.Card(
             html.P(id='EL115', className="card-text"),
             html.P(id='ELX', className="card-text"),
             html.P(id='ELNX', className="card-text"),
-            html.P(id='EL_indefini', className="card-text"),
+            html.P(id='EL_indefini_left', className="card-text"),
             html.P(id='Epot', className="card-text"),
+            html.P(id='EL_Misassigned', className='card-text'),
+            html.P(id='EL_PowerRed', className='card-text'),
+            html.P(id='ELX%', className="card-text"),
+            html.P(id='ELNX%', className="card-text"),
             # dbc.Button("Don't click here", color="danger"),
 
         ]
@@ -132,8 +136,13 @@ def update_dropdown(x):
      Output('EL115', 'children'),
      Output('ELX', 'children'),
      Output('ELNX', 'children'),
-     Output('EL_indefini', 'children'),
+     Output('EL_indefini_left', 'children'),
      Output('Epot', 'children'),
+     Output('EL_Misassigned', 'children'),
+     Output('EL_PowerRed', 'children'),
+     Output('ELX%', 'children'),
+     Output('ELNX%', 'children'),
+
      Output('download_button', 'href'),
      Output('download_grouped', 'href'),
      Output('table', 'children')
@@ -144,7 +153,7 @@ def callback_a(x):
 
     # Danger !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if x is None:
-        return tuple(None for i in range(14))
+        return tuple(None for i in range(18))
 
     Results = round(pd.read_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{x}.csv",
@@ -155,13 +164,17 @@ def callback_a(x):
     ELNX = Results['ELNX'].sum()
     Epot = Results['Epot'].sum()
     EL = Results['EL'].sum()
-    EL_indefini = Results['EL_indefini'].sum()
+    EL_2006 = Results['EL_2006'].sum()
+    EL_indefini_left = Results['EL_indefini_left'].sum()
+
+    EL_Misassigned = Results['EL_Misassigned'].sum()
+    EL_PowerRed = Results['EL_PowerRed'].sum()
 
     EL_wind = Results['EL_wind'].sum()
     EL_wind_start = Results['EL_wind_start'].sum()
     EL_alarm_start = Results['EL_alarm_start'].sum()
 
-    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX), 2)
+    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006), 2)
 
     MAA_indefini = round(100 * (Ep + ELX) / (Ep + EL), 2)
 
@@ -217,9 +230,16 @@ def callback_a(x):
             f'MAA_indefini_adjusted = {MAA_indefini_adjusted}%',
             f'Energy produced: {Ep:,.2f} kWh',
             f'Energy Lost excusable: {ELX:,.2f} kWh',
-            f'Energy Lost non-excusable: {ELNX:,.2f} kWh',
-            f'Energy Lost unassigned: {EL_indefini:,.2f} kWh',
+            f'Energy Lost non-excusable: {ELNX + EL_2006:,.2f} kWh',
+            f'Energy Lost unassigned: {EL_indefini_left:,.2f} kWh',
             f'Potential Energy: {Epot:,.2f} kWh',
+
+            f'EL_Misassigned: {EL_Misassigned:,.2f} kWh',
+            f'EL_PowerRed: {EL_PowerRed:,.2f} kWh',
+
+            f'Energy Lost excusable: {100 * (ELX / (ELX + ELNX + EL_2006 + Ep)):,.2f} %',
+            f'Energy Lost non-excusable: {100  * (ELNX / (ELX + ELNX + EL_2006 + Ep)):,.2f} %',
+
             location,
             location_grouped,
             table
