@@ -9,6 +9,7 @@ import multiprocessing as mp
 import pandas as pd
 
 
+
 def zip_to_df(data_type, sql, period):
 
     file_name = f'{period}-{data_type}'
@@ -93,7 +94,7 @@ def apply_cascade(result_sum):
     return df
 
 
-def upsample(df_group, period):
+def upsample(df_group, period, full_range_var):
 
     StationId, df = df_group
 
@@ -139,12 +140,7 @@ def upsample(df_group, period):
 
     period_dt_upper = period_dt_upper.strftime('%Y-%m')
 
-    full_range = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
-                               pd.Timestamp(
-                                   f'{period_dt_upper}-01 00:00:00.000'),
-                               freq='10T')
-
-    result = result.reindex(index=full_range, fill_value=0)
+    result = result.reindex(index=full_range_var, fill_value=0)
 
     result['StationId'] = StationId
 
@@ -172,8 +168,6 @@ def alarms_to_10min(df_group, full_range_var):
                                     'UK Text', 'Error Type', 'NewTimeOn'])
 
     # -------------------------------------------------------------------------
-
-
 
 
 def realperiod_10mins(last_df):
@@ -231,12 +225,9 @@ def remove_1005_overlap(merged_last_df, StationNr, alarms_df_1005_10min):
     return merged_last_df
 
 
-def full_range(df, period, next_period):
-    month_range = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
-                                pd.Timestamp(f'{next_period}-01 00:00:00.000'),
-                                freq='10T')
+def full_range(df, period, next_period, full_range_var):
 
-    new_df = pd.DataFrame(index=month_range)
+    new_df = pd.DataFrame(index=full_range_var)
 
     df = df.set_index('TimeStamp')
     df = df.drop('StationNr', axis=1)
@@ -271,7 +262,7 @@ def outer_fill(df, period):
     period_dt_lower = period_dt + relativedelta(months=-1)
     period_lower = period_dt_lower.strftime('%Y-%m')
 
-    if df['Parameter'].iat[0] == 'Resumed':
+    if df['Parameter'].iat[0] in {'Resumed', 'Resumed;Resumed'}:
         first_row = pd.DataFrame({
             'TimeOn': pd.Timestamp(f'{period_lower}-01 00:10:00.000'),
             'Alarmcode': 115,
@@ -280,7 +271,7 @@ def outer_fill(df, period):
         df = pd.concat([first_row, df], sort=False).reset_index(
             drop=True)
 
-    if df['Parameter'].iat[-1] == 'Stopped':
+    if df['Parameter'].iat[-1] in {'Stopped', 'Stopped;Stopped'}:
         last_row = pd.DataFrame({
             'TimeOn': pd.Timestamp(f'{period_upper}-01 00:00:00.000'),
             'Alarmcode': 115,
@@ -295,8 +286,8 @@ def outer_fill(df, period):
 def inner_fill(df, name, alarms_result_sum):
 
     for j in df.index[:-1]:
-        if (df['Parameter'].iat[j] == 'Stopped') & (
-                df['Parameter'].iat[j + 1] == 'Stopped'):
+        if (df['Parameter'].iat[j] in {'Stopped', 'Stopped;Stopped'}) & (
+                df['Parameter'].iat[j + 1] in {'Stopped', 'Stopped;Stopped'}):
 
             result_turbine = alarms_result_sum.loc[(
                 alarms_result_sum.StationNr == name)].copy()
@@ -316,8 +307,8 @@ def inner_fill(df, name, alarms_result_sum):
             df = df.append(line, ignore_index=False)
             df = df.sort_index().reset_index(drop=True)
 
-        elif (df['Parameter'].iat[j] == 'Resumed') & (
-                df['Parameter'].iat[j + 1] == 'Resumed'):
+        elif (df['Parameter'].iat[j] in {'Resumed', 'Resumed;Resumed'}) & (
+                df['Parameter'].iat[j + 1] in {'Resumed', 'Resumed;Resumed'}):
 
             TimeOn = alarms_result_sum.loc[(
                 alarms_result_sum.StationNr == name) & (
@@ -654,6 +645,8 @@ class read_files():
         alarms.dropna(subset=['Alarmcode'], inplace=True)
         alarms.reset_index(drop=True, inplace=True)
         alarms['Alarmcode'] = alarms.Alarmcode.astype(int)
+        alarms['Parameter'] = alarms.Parameter.str.replace(' ', '')
+
         return alarms
 
     # ------------------------------tur---------------------------
@@ -711,8 +704,33 @@ class read_files():
 
 def full_calculation(period):
 
+
     # reading all files with function
     met, tur, alarms, cnt, grd, din = read_files.read_all(period)
+
+    # ------------------------------------------------------------
+
+
+    period_dt = dt.strptime(period, "%Y-%m")
+    period_month = period_dt.month
+    previous_period_dt = period_dt + relativedelta(months=-1)
+    previous_period = previous_period_dt.strftime("%Y-%m")
+    next_period_dt = period_dt + relativedelta(months=1)
+    next_period = next_period_dt.strftime("%Y-%m")
+
+    currentMonth = dt.now().month
+    currentYear = dt.now().year
+    currentPeriod = f'{currentYear}-{str(currentMonth).zfill(2)}'
+    currentPeriod_dt = dt.strptime(currentPeriod, "%Y-%m")
+
+    period_start = pd.Timestamp(f'{period}-01 00:10:00.000')
+
+    if currentPeriod_dt <= period_dt: # if calculating ongoing month
+        period_end = cnt.TimeStamp.max()
+    else:
+        period_end = pd.Timestamp(f'{next_period}-01 00:10:00.000')
+
+    full_range_var = pd.date_range(period_start, period_end, freq='10T')
 
     # ----------------------Sanity check---------------------------
     sanity_grd = grd.query(
@@ -725,7 +743,15 @@ def full_calculation(period):
     sanity_din = din.query('''0 <= wtc_PowerRed_timeon <= 600''').index
 
     grd_outliers = grd.loc[grd.index.difference(sanity_grd)]
-    cnt_outliers = cnt.loc[cnt.index.difference(sanity_cnt)]
+    # cnt_outliers = cnt.loc[cnt.index.difference(sanity_cnt)].groupby('StationId').apply(
+    #     lambda df: df.reindex(index=full_range_var)
+    # )
+
+    cnt_outliers = cnt.groupby('StationId').apply(
+        lambda df: df.reindex(index=full_range_var))
+
+    cnt_outliers = cnt_outliers.loc[cnt_outliers.wtc_kWG1TotE_accum.isna()]
+
     tur_outliers = tur.loc[tur.index.difference(sanity_tur)]
     # met_outliers = met.loc[met.index.difference(sanity_met)]
     din_outliers = din.loc[din.index.difference(sanity_din)]
@@ -753,17 +779,8 @@ def full_calculation(period):
     error_list.rename(columns={'Number': 'Alarmcode'}, inplace=True)
 
     # ------------------------------------------------------
-    period_dt = dt.strptime(period, "%Y-%m")
-    period_month = period_dt.month
-    previous_period_dt = period_dt + relativedelta(months=-1)
-    previous_period = previous_period_dt.strftime("%Y-%m")
-    next_period_dt = period_dt + relativedelta(months=1)
-    next_period = next_period_dt.strftime("%Y-%m")
 
-    period_start = pd.Timestamp(f'{period}-01 00:10:00.000')
-    period_end = pd.Timestamp(f'{next_period}-01 00:10:00.000')
-
-    for i in range(1, 4):  # append last 3 months alarms
+    for i in range(1, 5):  # append last 4 months alarms
 
         ith_previous_period_dt = period_dt + relativedelta(months=-i)
         ith_previous_period = ith_previous_period_dt.strftime("%Y-%m")
@@ -787,19 +804,24 @@ def full_calculation(period):
     result_sum = result_sum.loc[result_sum['Error Type'] != 'W']
 
     # ------------------------------Fill NA TimeOff-------------------------------------
+
+    print(f'TimeOff NAs = {result_sum.TimeOff.isna().sum()}')
+
+    if result_sum.TimeOff.isna().sum():
+        print(
+            f'earliest TimeOn when TimeOff is NA= \
+            {result_sum.query("TimeOff.isna()").TimeOn.min()}')
+
     result_sum.TimeOff.fillna(period_end, inplace=True)
     # ------------------------------Keep only alarms in period--------------------------
 
     print('Keep only alarms in period')
 
-    full_range_var = pd.date_range(pd.Timestamp(f'{period}-01 00:10:00.000'),
-                                   pd.Timestamp(
-        f'{next_period}-01 00:00:00.000'),
-        freq='10T')
+    result_sum = result_sum.query('(@period_start < TimeOn <= @period_end) | \
+                                   (@period_start < TimeOff <= @period_end) | \
+                                   ((TimeOn < @period_start) & (@period_end <= TimeOff))')
 
-    result_sum = result_sum.query('(@period_start < TimeOn < @period_end) | \
-                                   (@period_start < TimeOff < @period_end) | \
-                                   ((TimeOn < @period_start) & (@period_end < TimeOff))')
+    warning_date = result_sum.TimeOn.min()
 
     # Determine alarms real periods applying cascade method
 
@@ -810,7 +832,7 @@ def full_calculation(period):
     print('Cascading done')
 
     # ----------------openning pool for multiprocessing------------------------
-    pool = mp.Pool(processes=(mp.cpu_count()))
+    pool = mp.Pool(processes=(mp.cpu_count() - 1))
 
     # -------------------2006  binning --------------------------------------
 
@@ -820,6 +842,10 @@ def full_calculation(period):
         (alarms['Alarmcode'] == 2006)].copy()
     # alarms_df_2006['TimeOff'] = alarms_df_2006['NewTimeOn']
     alarms_df_2006['NewTimeOn'] = alarms_df_2006['TimeOn']
+
+    alarms_df_2006 = alarms_df_2006.query('(@period_start < TimeOn < @period_end) | \
+                                   (@period_start < TimeOff < @period_end) | \
+                                   ((TimeOn < @period_start) & (@period_end < TimeOff))')
 
     if not alarms_df_2006.empty:
         grp_lst_args = iter([(n, full_range_var)
@@ -983,7 +1009,7 @@ def full_calculation(period):
     alarms_binned = (
         alarms_binned
         .groupby('StationNr')
-        .apply(lambda df: full_range(df, period, next_period))
+        .apply(lambda df: full_range(df, period, next_period, full_range_var))
         .reset_index()
         .rename(columns={'level_1': 'TimeStamp',
                          'StationNr': 'StationId',
@@ -1141,11 +1167,11 @@ def full_calculation(period):
     cnt_115_final['next_AcWindSp'] = cnt_115_final.groupby(
         'TimeStamp')['wtc_AcWindSp_mean'].shift(-1)
 
-    cnt_115_final['prev_ActPower'] = cnt_115_final.groupby(
-        'TimeStamp')['wtc_ActPower_mean'].shift()
+    cnt_115_final['prev_ActPower_min'] = cnt_115_final.groupby(
+        'TimeStamp')['wtc_ActPower_min'].shift()
 
-    cnt_115_final['next_ActPower'] = cnt_115_final.groupby(
-        'TimeStamp')['wtc_ActPower_mean'].shift(-1)
+    cnt_115_final['next_ActPower_min'] = cnt_115_final.groupby(
+        'TimeStamp')['wtc_ActPower_min'].shift(-1)
 
     cnt_115_final['prev_Alarme'] = cnt_115_final.groupby(
         'TimeStamp')['RealPeriod'].shift()
@@ -1189,7 +1215,7 @@ def full_calculation(period):
 
     # -------------------------------------------------------------------------
 
-    def lowind(cnt_115_final):
+    def lowind(df):
 
         etape1 = ((df.DiffV1 > 1) &
                   (df.DiffV2 > 1) &
@@ -1197,17 +1223,11 @@ def full_calculation(period):
                    (df.next_AcWindSp >= 5) |
                    (df.wtc_AcWindSp_mean >= 5)))
 
-        # if at least 3 of these conditions are true
-        mask_1 = (((df['wtc_AcWindSp_mean'] < 5.5) &
-                   ((df['prev_AcWindSp'] < 5.5) |
-                    (df['next_AcWindSp'] < 5.5))) &
-                  (df['EL_indefini'] > 0)
-                  )
-
-        mask_1bis = (
+        mask_1 = ~(
             etape1 & (((df.prev_ActPower_min > 0) & (df.next_ActPower_min > 0)) |
                       ((df.prev_ActPower_min > 0) & (df.next_Alarme > 0)) |
-                      ((df.next_ActPower_min > 0) & (df.prev_Alarme > 0))))
+                      ((df.next_ActPower_min > 0) & (df.prev_Alarme > 0)))
+        ) & (df['EL_indefini'] > 0)
 
         mask_2 = mask_1.shift().bfill()
 
@@ -1253,11 +1273,11 @@ def full_calculation(period):
 
     # ---------Misassigned low wind---------------
     EL_Misassigned_mask = (cnt_115_final["UK Text"].str.contains("low wind") &
-                           (((cnt_115_final["prev_AcWindSp"] > 5.5) &
-                             (cnt_115_final["next_AcWindSp"] > 5.5)) |
-                            ((cnt_115_final["met_WindSpeedRot_mean_38"] > 7.5) &
-                             (cnt_115_final["met_WindSpeedRot_mean_39"] > 7.5) &
-                             (cnt_115_final["met_WindSpeedRot_mean_246"] > 7.5))))
+                           (cnt_115_final['DiffV1'] > 1) &
+                           (cnt_115_final['DiffV2'] > 1) &
+                           ((cnt_115_final['prev_AcWindSp'] >= 5) |
+                            (cnt_115_final['next_AcWindSp'] >= 5) |
+                            (cnt_115_final['wtc_AcWindSp_mean'] >= 5)))
 
     cnt_115_final.loc[EL_Misassigned_mask,
                       'EL_Misassigned'] = cnt_115_final.loc[EL_Misassigned_mask,
@@ -1266,35 +1286,51 @@ def full_calculation(period):
     cnt_115_final['EL_Misassigned'].fillna(0, inplace=True)
     # -------------------------------------------------------------------------
 
+    columns_toround = list(set(cnt_115_final.columns) -
+                           set(('StationId', 'TimeStamp', 'UK Text')))
+    cnt_115_final[columns_toround] = cnt_115_final[columns_toround].round(
+        2).astype(np.float32)
+
+    # -------------------------------------------------------------------------
+
     Ep = cnt_115_final['wtc_kWG1TotE_accum'].sum()
     EL = cnt_115_final['EL'].sum()
     ELX = cnt_115_final['ELX'].sum()
     ELNX = cnt_115_final['ELNX'].sum()
-    Epot = cnt_115_final['Epot'].sum()
+    EL_2006 = cnt_115_final['EL_2006'].sum()
     EL_PowerRed = cnt_115_final['EL_PowerRed'].sum()
-    # EL_indefini = cnt_115_final['EL_indefini'].sum()
+    EL_Misassigned = cnt_115_final['EL_Misassigned'].sum()
+
+    Epot = cnt_115_final['Epot'].sum()
+
+    ELX_eq = ELX - EL_Misassigned
+    ELNX_eq = ELNX + EL_2006 + EL_PowerRed + EL_Misassigned
+    Epot_eq = Ep + ELX_eq + ELNX_eq
 
     EL_wind = cnt_115_final['EL_wind'].sum()
     EL_wind_start = cnt_115_final['EL_wind_start'].sum()
     EL_alarm_start = cnt_115_final['EL_alarm_start'].sum()
 
-    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX),
-                       2)  # + ELNX_bridage
+    MAA_brut = round(100 * (
+        Ep + ELX) / (
+            Ep + ELX + ELNX + EL_2006 + EL_PowerRed), 2)
 
-    MAA_result_bridage = round(
-        100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_PowerRed), 2)
-
-    MAA_indefini = round(100 * (Ep + ELX) / (Ep + EL), 2)
+    MAA_brut_mis = round(100 * (
+        Ep + ELX_eq) / (Epot_eq), 2)
 
     MAA_indefni_adjusted = 100 * (
         Ep + ELX) / (
             Ep + EL - (EL_wind + EL_wind_start + EL_alarm_start))
+        
 
-    print(MAA_result, MAA_indefini, MAA_indefni_adjusted)
+    print(MAA_brut, MAA_brut_mis, MAA_indefni_adjusted)
+
+
+    print(f'warning: first date in alarm = {warning_date}')
 
     return cnt_115_final
 
 
 if __name__ == '__main__':
 
-    full_calculation('2021-04')
+    full_calculation('2021-05')
