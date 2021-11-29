@@ -43,7 +43,7 @@ tab1_content = dbc.Card(
             html.P(id='ELX', className="card-text"),
             html.P(id='ELNX', className="card-text"),
             html.P(id='EL_indefini_left', className="card-text"),
-            html.P(id='Epot', className="card-text"),
+            html.P(id='Epot_FSA', className="card-text"),
             html.P(id='EL_Misassigned', className='card-text'),
             html.P(id='EL_PowerRed', className='card-text'),
             html.P(id='ELX%', className="card-text"),
@@ -137,7 +137,7 @@ def update_dropdown(x):
      Output('ELX', 'children'),
      Output('ELNX', 'children'),
      Output('EL_indefini_left', 'children'),
-     Output('Epot', 'children'),
+     Output('Epot_FSA', 'children'),
      Output('EL_Misassigned', 'children'),
      Output('EL_PowerRed', 'children'),
      Output('ELX%', 'children'),
@@ -161,8 +161,6 @@ def callback_a(x):
 
     Ep = Results['wtc_kWG1TotE_accum'].sum()
     ELX = Results['ELX'].sum()
-    ELNX = Results['ELNX'].sum()
-    Epot = Results['Epot'].sum()
     EL = Results['EL'].sum()
     EL_2006 = Results['EL_2006'].sum()
     EL_indefini_left = Results['EL_indefini_left'].sum()
@@ -170,11 +168,15 @@ def callback_a(x):
     EL_Misassigned = Results['EL_Misassigned'].sum()
     EL_PowerRed = Results['EL_PowerRed'].sum()
 
+    ELNX = Results['ELNX'].sum() + EL_2006
+
     EL_wind = Results['EL_wind'].sum()
     EL_wind_start = Results['EL_wind_start'].sum()
     EL_alarm_start = Results['EL_alarm_start'].sum()
 
-    MAA_result = round(100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006), 2)
+    Epot_FSA = Ep + ELX + ELNX
+
+    MAA_result = round(100 * (Ep + ELX) / Epot_FSA, 2)
 
     MAA_indefini = round(100 * (Ep + ELX) / (Ep + EL), 2)
 
@@ -230,15 +232,15 @@ def callback_a(x):
             f'MAA_indefini_adjusted = {MAA_indefini_adjusted}%',
             f'Energy produced: {Ep:,.2f} kWh',
             f'Energy Lost excusable: {ELX:,.2f} kWh',
-            f'Energy Lost non-excusable: {ELNX + EL_2006:,.2f} kWh',
+            f'Energy Lost non-excusable (+ 2006): {ELNX:,.2f} kWh',
             f'Energy Lost unassigned: {EL_indefini_left:,.2f} kWh',
-            f'Potential Energy: {Epot:,.2f} kWh',
+            f'Potential Energy: {Epot_FSA:,.2f} kWh',
 
             f'EL_Misassigned: {EL_Misassigned:,.2f} kWh',
-            f'EL_PowerRed: {EL_PowerRed:,.2f} kWh',
+            f'EL_PowerRed: {EL_PowerRed:,.2f} kWh | EL_2006: {EL_2006:,.2f} kWh',
 
-            f'Energy Lost excusable: {100 * (ELX / (ELX + ELNX + EL_2006 + Ep)):,.2f} %',
-            f'Energy Lost non-excusable: {100  * (ELNX / (ELX + ELNX + EL_2006 + Ep)):,.2f} %',
+            f'Energy Lost excusable: {100 * (ELX / (Epot_FSA)):,.2f} %',
+            f'Energy Lost non-excusable (+ 2006): {100  * ((ELNX) / (Epot_FSA)):,.2f} %',
 
             location,
             location_grouped,
