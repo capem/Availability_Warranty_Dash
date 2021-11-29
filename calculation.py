@@ -84,12 +84,8 @@ def apply_cascade(result_sum):
     mask_siemens = (df['Error Type'] == 1)
     mask_tarec = (df['Error Type'] == 0)
 
-    df['RealPeriodSiemens(s)'] = df[mask_siemens].RealPeriod  # .dt.seconds
-    df['RealPeriodTarec(s)'] = df[mask_tarec].RealPeriod  # .dt.seconds
-
-    df = df.rename(
-        columns={"RealPeriodSiemens(s)": "Period Siemens(s)",
-                 "RealPeriodTarec(s)": "Period Tarec(s)"})
+    df["Period Siemens(s)"] = df[mask_siemens].RealPeriod  # .dt.seconds
+    df["Period Tarec(s)"] = df[mask_tarec].RealPeriod  # .dt.seconds
 
     return df
 
@@ -747,20 +743,20 @@ def full_calculation(period):
     #     lambda df: df.reindex(index=full_range_var)
     # )
 
-    cnt_outliers = cnt.groupby('StationId').apply(
-        lambda df: df.reindex(index=full_range_var))
+    # cnt_outliers = cnt.groupby('StationId').apply(
+    #     lambda df: df.reindex(index=full_range_var))
 
-    cnt_outliers = cnt_outliers.loc[cnt_outliers.wtc_kWG1TotE_accum.isna()]
+    # cnt_outliers = cnt_outliers.loc[cnt_outliers.wtc_kWG1TotE_accum.isna()]
 
-    tur_outliers = tur.loc[tur.index.difference(sanity_tur)]
-    # met_outliers = met.loc[met.index.difference(sanity_met)]
-    din_outliers = din.loc[din.index.difference(sanity_din)]
+    # tur_outliers = tur.loc[tur.index.difference(sanity_tur)]
+    # # met_outliers = met.loc[met.index.difference(sanity_met)]
+    # din_outliers = din.loc[din.index.difference(sanity_din)]
 
-    with pd.ExcelWriter(f'./monthly_data/results/outliers/{period}_outliers.xlsx') as writer:
-        grd_outliers.to_excel(writer, sheet_name='grd')
-        cnt_outliers.to_excel(writer, sheet_name='cnt')
-        tur_outliers.to_excel(writer, sheet_name='tur')
-        din_outliers.to_excel(writer, sheet_name='din')
+    # with pd.ExcelWriter(f'./monthly_data/results/outliers/{period}_outliers.xlsx') as writer:
+    #     grd_outliers.to_excel(writer, sheet_name='grd')
+    #     cnt_outliers.to_excel(writer, sheet_name='cnt')
+    #     tur_outliers.to_excel(writer, sheet_name='tur')
+    #     din_outliers.to_excel(writer, sheet_name='din')
 
     grd = grd.loc[grd.index.isin(sanity_grd)]
     cnt = cnt.loc[cnt.index.isin(sanity_cnt)]
@@ -917,32 +913,19 @@ def full_calculation(period):
 
     # Remove previous period alarms
     mask = (alarms_result_sum['TimeOn'].dt.month == period_month) | (
-        alarms_result_sum['TimeOff'].dt.month == period_month)
+        alarms_result_sum['TimeOff'].dt.month == period_month) | (
+            alarms_result_sum['TimeOff'] == period_end
+        )
 
     alarms_result_sum = alarms_result_sum.loc[mask]
 
     # ----------------------- binning --------------------------------------
 
     print('Binning')
-    # Binning alarms (old method)
-
-    # grp_lst_args = iter([(n, period)
-    #                      for n in alarms_result_sum.groupby('StationNr')])
-
-    # alarms_binned = pool.starmap(upsample, grp_lst_args)
-
-    # alarms_binned = pd.concat(alarms_binned)
-
-    # alarms_binned.reset_index(inplace=True)
-    # alarms_binned.rename(columns={'index': 'TimeStamp'}, inplace=True)
-
     # Binning alarms and remove overlap with 1005 (new method)
 
     alarms_df_clean = alarms_result_sum.loc[(
         alarms_result_sum['RealPeriod'].dt.total_seconds() != 0)].copy()
-
-    # alarms_df_clean_10min = alarms_df_clean.groupby(
-    #     'StationNr').apply(lambda df: alarms_to_10min(df, period, next_period))
 
     grp_lst_args = iter([(n, full_range_var)
                          for n in alarms_df_clean.groupby('StationNr')])
@@ -1333,4 +1316,4 @@ def full_calculation(period):
 
 if __name__ == '__main__':
 
-    full_calculation('2021-05')
+    full_calculation('2021-10')
