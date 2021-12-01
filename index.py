@@ -1,6 +1,6 @@
-import dash_core_components as dcc
+from dash import dcc
+from dash import html
 
-import dash_html_components as html
 from dash.dependencies import Input, Output
 
 from app import app as app
@@ -31,4 +31,4 @@ def display_page(pathname):
 if __name__ == "__main__":
     # app.run_server()
     app.run_server(debug=True, port=80, host="localhost")
-    # waitress-serve --port=80 --channel-timeout=240 --threads=6 index:app.server
+    # waitress-serve --port=80 --channel-timeout=400 --threads=6 index:app.server

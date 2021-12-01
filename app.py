@@ -7,7 +7,7 @@ Created on Sat Feb 15 16:45:52 2020
 """
 import dash
 import dash_bootstrap_components as dbc
-import dash_html_components as html
+from dash import html
 from flask import send_from_directory
 
 

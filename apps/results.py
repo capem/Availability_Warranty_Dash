@@ -1,8 +1,10 @@
 import dash_bootstrap_components as dbc
-import dash_html_components as html
-import dash_core_components as dcc
+
+from dash import dcc
+from dash import html
+
 from dash.dependencies import Input, Output
-import dash_table
+import dash.dash_table as dash_table
 
 import pandas as pd
 import os
@@ -95,7 +97,7 @@ layout = html.Div([
                            'border': '1px solid black',
                            }),
              tabs],
-            no_gutters=True,
+            className="g-0",
             style={'flexDirection': 'column', 'alignItems': 'center',
                    'justifyContent': 'center'}),
 
@@ -106,8 +108,8 @@ layout = html.Div([
                           'textDecoration': 'none',
                           'border': '1px solid black',
                           }),
-            no_gutters=True, style={'justifyContent': 'center'}),
-    dbc.Row(id='table', no_gutters=True,
+            className="g-0", style={'justifyContent': 'center'}),
+    dbc.Row(id='table', className="g-0",
             style={
                 'justifyContent': 'center',
                 'margin': '0 auto'
