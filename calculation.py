@@ -29,9 +29,7 @@ def zip_to_df(data_type, sql, period):
 
     file_name = f"{period}-{data_type.lower()}"
 
-    data_type_path = (
-        f"./monthly_data/uploads/{data_type.upper()}/"
-    )
+    data_type_path = f"./monthly_data/uploads/{data_type.upper()}/"
 
     ZipFile(f"{data_type_path}{file_name}.zip", "r").extractall(data_type_path)
 
@@ -48,6 +46,7 @@ def zip_to_df(data_type, sql, period):
 
 
 def sqldate_to_datetime(column):
+
     try:
         column = column.str.replace(",", ".").astype(float)
     except:
@@ -685,21 +684,34 @@ class read_files:
     # -----------------------------sum---------------------------
     @staticmethod
     def read_sum(period):
-        usecols_sum = """
-        SELECT CDbl(TimeOn) AS TOn, CDbl(TimeOff) AS TOff,
-        StationNr, Alarmcode, ID, Parameter
-        FROM tblAlarmLog WHERE TimeOff IS NOT NULL
-        union
-        SELECT CDbl(TimeOn) AS TOn, TimeOff AS TOff,
-        StationNr, Alarmcode, ID, Parameter
-        FROM tblAlarmLog WHERE TimeOff IS NULL
-        """
-        alarms = zip_to_df("sum", usecols_sum, period)
+        # usecols_sum = """
+        # SELECT CDbl(TimeOn) AS TOn, CDbl(TimeOff) AS TOff,
+        # StationNr, Alarmcode, ID, Parameter
+        # FROM tblAlarmLog WHERE TimeOff IS NOT NULL
+        # union
+        # SELECT CDbl(TimeOn) AS TOn, TimeOff AS TOff,
+        # StationNr, Alarmcode, ID, Parameter
+        # FROM tblAlarmLog WHERE TimeOff IS NULL
+        # """
+        # alarms = zip_to_df("sum", usecols_sum, period)
 
-        alarms.loc[:, "TOn"] = sqldate_to_datetime(alarms["TOn"].copy())
-        alarms.loc[:, "TOff"] = sqldate_to_datetime(alarms["TOff"].copy())
+        # alarms.rename(columns={"TOn": "TimeOn", "TOff": "TimeOff"}, inplace=True)
+        # alarms.loc[:, "TimeOn"] = sqldate_to_datetime(alarms["TimeOn"].copy())
+        # alarms.loc[:, "TimeOff"] = sqldate_to_datetime(alarms["TimeOff"].copy())
 
-        alarms.rename(columns={"TOn": "TimeOn", "TOff": "TimeOff"}, inplace=True)
+        alarms = pd.read_table(
+            f"./monthly_data/uploads/SUM/{period}-sum.rpt ",
+            sep="|",
+            # on_bad_lines="skip",
+        ).iloc[:-1]
+
+        alarms.loc[:, "TimeOn"] = pd.to_datetime(
+            alarms["TimeOn"], format="%Y-%m-%d %H:%M:%S.%f"
+        )
+        alarms.loc[:, "TimeOff"] = pd.to_datetime(
+            alarms["TimeOff"], format="%Y-%m-%d %H:%M:%S.%f"
+        )
+
         alarms = alarms[alarms.StationNr >= 2307405]
         alarms = alarms[alarms.StationNr <= 2307535].reset_index(drop=True)
         alarms.dropna(subset=["Alarmcode"], inplace=True)
@@ -794,16 +806,16 @@ def full_calculation(period):
 
     period_start = pd.Timestamp(f"{period}-01 00:10:00.000")
 
-    if currentPeriod_dt <= period_dt:  # if calculating ongoing month
-        period_end = cnt.TimeStamp.max()
-    else:
-        period_end = pd.Timestamp(f"{next_period}-01 00:10:00.000")
+    # if currentPeriod_dt <= period_dt:  # if calculating ongoing month
+    period_end = cnt.TimeStamp.max()
+    # else:
+    #     period_end = pd.Timestamp(f"{next_period}-01 00:10:00.000")
 
     full_range_var = pd.date_range(period_start, period_end, freq="10T")
 
     # ----------------------Sanity check---------------------------
     sanity_grd = grd.query(
-        """-1000 <= wtc_ActPower_min <= 3000 & -1000 <= wtc_ActPower_max <= 3000 & -1000 <= wtc_ActPower_mean <= 3000"""
+        """-1000 <= wtc_ActPower_min <= 2500 & -1000 <= wtc_ActPower_max <= 2500 & -1000 <= wtc_ActPower_mean <= 2500"""
     ).index
     sanity_cnt = cnt.query(
         """-500 <= wtc_kWG1Tot_accum <= 500 & 0 <= wtc_kWG1TotE_accum <= 500"""
@@ -851,7 +863,7 @@ def full_calculation(period):
 
     # ------------------------------------------------------
 
-    for i in range(1, 5):  # append last 4 months alarms
+    for i in range(1, 12):  # append last months alarms
 
         ith_previous_period_dt = period_dt + relativedelta(months=-i)
         ith_previous_period = ith_previous_period_dt.strftime("%Y-%m")
@@ -876,18 +888,6 @@ def full_calculation(period):
 
     # Remove warnings
     result_sum = result_sum.loc[result_sum["Error Type"] != "W"]
-
-    # ------------------------------Fill NA TimeOff-------------------------------------
-
-    print(f"TimeOff NAs = {result_sum.TimeOff.isna().sum()}")
-
-    if result_sum.TimeOff.isna().sum():
-        print(
-            f'earliest TimeOn when TimeOff is NA= \
-            {result_sum.query("TimeOff.isna()").TimeOn.min()}'
-        )
-
-    result_sum.TimeOff.fillna(period_end, inplace=True)
     # ------------------------------Keep only alarms in period--------------------------
 
     print("Keep only alarms in period")
@@ -900,6 +900,18 @@ def full_calculation(period):
 
     warning_date = result_sum.TimeOn.min()
 
+    # ------------------------------Fill NA TimeOff-------------------------------------
+
+    print(f"TimeOff NAs = {result_sum.TimeOff.isna().sum()}")
+
+    if result_sum.TimeOff.isna().sum():
+        print(
+            f'earliest TimeOn when TimeOff is NA= \
+            {result_sum.query("TimeOff.isna()").TimeOn.min()}'
+        )
+
+    result_sum.TimeOff.fillna(period_end, inplace=True)
+
     # Determine alarms real periods applying cascade method
 
     print("All Files Loaded Proceeding to calculations")
@@ -909,7 +921,7 @@ def full_calculation(period):
     print("Cascading done")
 
     # ----------------openning pool for multiprocessing------------------------
-    pool = mp.Pool(processes=(mp.cpu_count() - 1))
+    pool = mp.Pool(processes=(mp.cpu_count() - 0))
 
     # -------------------2006  binning --------------------------------------
 
@@ -962,7 +974,9 @@ def full_calculation(period):
     # ------------------115 filling binning -----------------------------------
 
     print("filling 115")
-    alarms_115_filled = fill_115(alarms, period, alarms_result_sum)
+    alarms_115_filled = fill_115(
+        alarms.query("@period_start < TimeOn < @period_end"), period, alarms_result_sum
+    )
     print("115 filled")
 
     print("upsampling 115")
@@ -981,7 +995,9 @@ def full_calculation(period):
     # -------------------20/25 filling binning --------------------------------
 
     print("filling 20")
-    alarms_20_filled = fill_20(alarms, period, alarms_result_sum)
+    alarms_20_filled = fill_20(
+        alarms.query("@period_start < TimeOn < @period_end"), period, alarms_result_sum
+    )
     print("20 filled")
     grp_lst_args = iter(
         [(n, period, "20-25") for n in alarms_20_filled.groupby("StationNr")]
@@ -1043,7 +1059,7 @@ def full_calculation(period):
     )
 
     alarms_df_1005_10min = pool.starmap(alarms_to_10min, grp_lst_args)
-
+    
     alarms_df_1005_10min = pd.concat(alarms_df_1005_10min)
 
     alarms_df_1005_10min.reset_index(inplace=True)
