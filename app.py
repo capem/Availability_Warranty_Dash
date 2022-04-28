@@ -49,7 +49,7 @@ navbar = dbc.Navbar(
         ),
         dbc.NavLink("Calculate", href="/apps/app1",
                     style={"fontSize": "150%"}),
-        dbc.NavLink("Adjust", href="/apps/adjust115",
+        dbc.NavLink("Adjust", href="/apps/adjust",
                     style={"fontSize": "150%"}),
         dbc.NavLink("Results", href="/apps/results",
                     style={"fontSize": "150%"}),
