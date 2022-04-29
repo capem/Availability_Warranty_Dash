@@ -19,6 +19,14 @@ from app import app
 import calculation as calculation
 
 import dash_uploader as du
+import subprocess
+
+
+def get_git_revision_hash() -> str:
+    return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
+
+
+commit_hash = get_git_revision_hash()
 
 temp_upload_directory = r"./monthly_data/uploads/temp/"
 
@@ -251,11 +259,15 @@ def callback_calcul(value):
         print(e)
         return html.P("Please upload rest of files.")
 
+    with open(f"./monthly_data/results/{value}-Availability.csv", "w") as f:
+        f.write(f"# Commit_hash: {commit_hash}\n")
+
     Results.to_csv(
         f"./monthly_data/results/{value}-Availability.csv",
         decimal=",",
         sep=";",
         index=False,
+        mode="a",
     )
 
     Results = Results[
