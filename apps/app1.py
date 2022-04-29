@@ -5,7 +5,7 @@ from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from dash.dash import no_update
 import re
-import pandas as pd
+
 # from flask_caching import Cache
 
 import os
@@ -19,14 +19,6 @@ from app import app
 import calculation as calculation
 
 import dash_uploader as du
-import subprocess
-
-
-def get_git_revision_hash() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
-
-
-commit_hash = get_git_revision_hash()
 
 temp_upload_directory = r"./monthly_data/uploads/temp/"
 
@@ -259,18 +251,12 @@ def callback_calcul(value):
         print(e)
         return html.P("Please upload rest of files.")
 
-    writer = pd.ExcelWriter(
-        f"./monthly_data/results/{value}-Availability.xlsx", engine="xlsxwriter")
-
-    Results.to_excel(writer, sheet_name="Sheet1")
-
-    workbook = writer.book
-
-    workbook.set_properties({'comments': commit_hash})
-    workbook.set_custom_property("Commit_hash", commit_hash)
-
-    writer.close()
-
+    Results.to_csv(
+        f"./monthly_data/results/{value}-Availability.csv",
+        decimal=",",
+        sep=";",
+        index=False,
+    )
 
     Results = Results[
         [
