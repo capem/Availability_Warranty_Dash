@@ -108,95 +108,18 @@ def apply_cascade(result_sum):
     return df
 
 
-def upsample(df_group, period, full_range_var):
-
-    StationId, df = df_group
-
-    df = df.loc[:, ["NewTimeOn", "TimeOff", "Period Siemens(s)", "Period Tarec(s)"]]
-
-    df.loc[:, ["Period Siemens(s)", "Period Tarec(s)"]] = df[
-        ["Period Siemens(s)", "Period Tarec(s)"]
-    ].fillna(pd.Timedelta(0))
-
-    result = pd.melt(
-        df, id_vars=["Period Tarec(s)", "Period Siemens(s)"], value_name="date"
-    )
-
-    result["Period 0(s)"] = result["variable"].map({"NewTimeOn": 1, "TimeOff": -1})
-
-    result["Period 1(s)"] = result["Period 0(s)"]
-
-    result["Period 0(s)"] *= (
-        result["Period Tarec(s)"].dt.total_seconds().fillna(0).astype(int)
-    )
-
-    result["Period 1(s)"] *= (
-        result["Period Siemens(s)"].dt.total_seconds().fillna(0).astype(int)
-    )
-
-    result = result.set_index("date")
-
-    result = result.sort_index()
-
-    # precision en miliseconds
-    precision = 1000
-
-    result = result.resample(f"{precision}ms", label="right").sum().cumsum()
-
-    result.loc[result["Period 0(s)"] > 0, "Period 0(s)"] = precision / 1000
-
-    result.loc[result["Period 1(s)"] > 0, "Period 1(s)"] = precision / 1000
-
-    result = result.resample("10T", label="right").sum()
-
-    period_dt = dt.strptime(period, "%Y-%m")
-
-    period_dt_upper = period_dt + relativedelta(months=1)
-
-    period_dt_upper = period_dt_upper.strftime("%Y-%m")
-
-    result = result.reindex(index=full_range_var, fill_value=0)
-
-    result["StationId"] = StationId
-
-    return result
-
-
-def alarms_to_10min(df_group, full_range_var):
-
-    StationNr, alarms_df_clean_tur = df_group
-
-    last_df = pd.DataFrame()
-    for i, j in alarms_df_clean_tur.iterrows():
-
-        df = pd.DataFrame(index=full_range_var)
-        new_j = pd.DataFrame(j).T
-        df = df.loc[
-            (df.index >= j.NewTimeOn)
-            & (df.index <= (j.TimeOff + pd.Timedelta(minutes=10)))
-        ]
-        df = pd.concat([df, new_j]).bfill()
-        df.drop(df.tail(1).index, inplace=True)
-        last_df = pd.concat([last_df, df])
-
-    last_df["StationNr"] = StationNr
-
-    return last_df.reindex(
-        columns=[
-            "StationNr",
-            "TimeOn",
-            "TimeOff",
-            "Alarmcode",
-            "UK Text",
-            "Error Type",
-            "NewTimeOn",
-        ]
-    )
-
-    # -------------------------------------------------------------------------
-
-
 def realperiod_10mins(last_df):
+
+    last_df["TimeOnRound"] = last_df["NewTimeOn"].dt.ceil("10min")
+    last_df["TimeOffRound"] = last_df["TimeOff"].dt.ceil("10min")
+    last_df["TimeStamp"] = last_df.apply(
+        lambda row: pd.date_range(
+            row["TimeOnRound"], row["TimeOffRound"], freq="10min"
+        ),
+        axis=1,
+    )
+    last_df = last_df.explode("TimeStamp")
+
     last_df["RealPeriod"] = pd.Timedelta(0)
     last_df["Period Siemens(s)"] = pd.Timedelta(0)
     last_df["Period Tarec(s)"] = pd.Timedelta(0)
@@ -702,6 +625,7 @@ class read_files:
         alarms = pd.read_table(
             f"./monthly_data/uploads/SUM/{period}-sum.rpt ",
             sep="|",
+            skipfooter=2
             # on_bad_lines="skip",
         ).iloc[:-1]
 
@@ -804,7 +728,7 @@ def full_calculation(period):
     currentPeriod = f"{currentYear}-{str(currentMonth).zfill(2)}"
     currentPeriod_dt = dt.strptime(currentPeriod, "%Y-%m")
 
-    period_start = pd.Timestamp(f"{period}-01 00:10:00.000")
+    period_start = pd.Timestamp(f"{period}-01 00:00:00.000")
 
     # if currentPeriod_dt <= period_dt:  # if calculating ongoing month
     period_end = cnt.TimeStamp.max()
@@ -863,62 +787,83 @@ def full_calculation(period):
 
     # ------------------------------------------------------
 
-    for i in range(1, 12):  # append last months alarms
+    # for i in range(1, 12):  # append last months alarms
 
-        ith_previous_period_dt = period_dt + relativedelta(months=-i)
-        ith_previous_period = ith_previous_period_dt.strftime("%Y-%m")
+    #     ith_previous_period_dt = period_dt + relativedelta(months=-i)
+    #     ith_previous_period = ith_previous_period_dt.strftime("%Y-%m")
 
-        try:
-            previous_alarms = read_files.read_sum(ith_previous_period)
-            alarms = alarms.append(previous_alarms)
+    #     try:
+    #         previous_alarms = read_files.read_sum(ith_previous_period)
+    #         alarms = alarms.append(previous_alarms)
 
-        except FileNotFoundError:
-            print(f"Previous mounth -{i} alarms File not found")
+    #     except FileNotFoundError:
+    #         print(f"Previous mounth -{i} alarms File not found")
 
     # ------------------------------------------------------
-    """ label scada alarms with coresponding error type
-    and only keep alarm codes in error list"""
-    result_sum = pd.merge(
-        alarms,
-        error_list[["Alarmcode", "Error Type", "UK Text"]],
-        on="Alarmcode",
-        how="inner",
-        sort=False,
-    )
-
-    # Remove warnings
-    result_sum = result_sum.loc[result_sum["Error Type"] != "W"]
-    # ------------------------------Keep only alarms in period--------------------------
-
-    print("Keep only alarms in period")
-
-    result_sum = result_sum.query(
-        "(@period_start < TimeOn <= @period_end) | \
-                                   (@period_start < TimeOff <= @period_end) | \
-                                   ((TimeOn < @period_start) & (@period_end <= TimeOff))"
-    )
-
-    warning_date = result_sum.TimeOn.min()
+    alarms_0_1 = error_list.loc[error_list["Error Type"].isin([1, 0])].Alarmcode
 
     # ------------------------------Fill NA TimeOff-------------------------------------
 
-    print(f"TimeOff NAs = {result_sum.TimeOff.isna().sum()}")
+    alarms["OldTimeOn"] = alarms["TimeOn"]
+    alarms["OldTimeOff"] = alarms["TimeOff"]
 
-    if result_sum.TimeOff.isna().sum():
+    print(
+        f"TimeOff NAs = {alarms.loc[alarms.Alarmcode.isin(alarms_0_1)].TimeOff.isna().sum()}"
+    )
+
+    if alarms.loc[alarms.Alarmcode.isin(alarms_0_1)].TimeOff.isna().sum():
         print(
-            f'earliest TimeOn when TimeOff is NA= \
-            {result_sum.query("TimeOff.isna()").TimeOn.min()}'
+            f"earliest TimeOn when TimeOff is NA= \
+            {alarms.loc[alarms.Alarmcode.isin(alarms_0_1) & alarms.TimeOff.isna()].TimeOn.min()}"
         )
 
-    result_sum.TimeOff.fillna(period_end, inplace=True)
+    alarms.loc[alarms.Alarmcode.isin(alarms_0_1), "TimeOff"] = alarms.loc[
+        alarms.Alarmcode.isin(alarms_0_1), "TimeOff"
+    ].fillna(period_end)
+
+    # ------------------------------Alarms ending after period end ----------------------
+
+    alarms.loc[(alarms.TimeOff > period_end), "TimeOff"] = period_end
+
+    # ------------------------------Keep only alarms active in period-------------
+    alarms.reset_index(inplace=True, drop=True)
+    # ----dropping 1 0 alarms
+    alarms.drop(
+        alarms.query(
+            "(TimeOn < @period_start) & (TimeOff < @period_start) & Alarmcode.isin(@alarms_0_1)"
+        ).index,
+        inplace=True,
+    )
+
+    alarms.drop(
+        alarms.query("(TimeOn > @period_end)").index, inplace=True,
+    )
+    alarms.reset_index(drop=True, inplace=True)
+    # ------------------------------Alarms starting before period start -----------------
+    warning_date = alarms.TimeOn.min()
+
+    alarms.loc[
+        (alarms.TimeOn < period_start) & (alarms.Alarmcode.isin(alarms_0_1)), "TimeOn",
+    ] = period_start
+
+    # ----dropping non 1 0 alarms
+    alarms.drop(
+        alarms.query("~Alarmcode.isin(@alarms_0_1) & (TimeOn < @period_start)").index,
+        inplace=True,
+    )
+    alarms.reset_index(drop=True, inplace=True)
+
+    """ label scada alarms with coresponding error type
+    and only keep alarm codes in error list"""
+    result_sum = pd.merge(alarms, error_list, on="Alarmcode", how="inner", sort=False)
+
+    # Remove warnings
+    result_sum = result_sum.loc[result_sum["Error Type"].isin([1, 0])]
 
     # Determine alarms real periods applying cascade method
 
-    print("All Files Loaded Proceeding to calculations")
-
-    print("Cascade")
+    # apply cascade
     alarms_result_sum = apply_cascade(result_sum)
-    print("Cascading done")
 
     # ----------------openning pool for multiprocessing------------------------
     pool = mp.Pool(processes=(mp.cpu_count() - 0))
@@ -938,18 +883,7 @@ def full_calculation(period):
     )
 
     if not alarms_df_2006.empty:
-        grp_lst_args = iter(
-            [(n, full_range_var) for n in alarms_df_2006.groupby("StationNr")]
-        )
-
-        alarms_df_2006_10min = pool.starmap(alarms_to_10min, grp_lst_args)
-
-        alarms_df_2006_10min = pd.concat(alarms_df_2006_10min)
-
-        alarms_df_2006_10min.reset_index(inplace=True)
-        alarms_df_2006_10min.rename(columns={"index": "TimeStamp"}, inplace=True)
-
-        alarms_df_2006_10min = realperiod_10mins(alarms_df_2006_10min)
+        alarms_df_2006_10min = realperiod_10mins(alarms_df_2006)
 
         alarms_df_2006_10min = alarms_df_2006_10min.groupby("TimeStamp").agg(
             {"RealPeriod": "sum", "StationNr": "first"}
@@ -1020,6 +954,7 @@ def full_calculation(period):
     )
 
     alarms_result_sum = alarms_result_sum.loc[mask]
+    pool.close()
 
     # ----------------------- binning --------------------------------------
 
@@ -1030,18 +965,7 @@ def full_calculation(period):
         (alarms_result_sum["RealPeriod"].dt.total_seconds() != 0)
     ].copy()
 
-    grp_lst_args = iter(
-        [(n, full_range_var) for n in alarms_df_clean.groupby("StationNr")]
-    )
-
-    alarms_df_clean_10min = pool.starmap(alarms_to_10min, grp_lst_args)
-
-    alarms_df_clean_10min = pd.concat(alarms_df_clean_10min)
-
-    alarms_df_clean_10min.reset_index(inplace=True)
-    alarms_df_clean_10min.rename(columns={"index": "TimeStamp"}, inplace=True)
-
-    alarms_df_clean_10min = realperiod_10mins(alarms_df_clean_10min)
+    alarms_df_clean_10min = realperiod_10mins(alarms_df_clean)
     alarms_df_clean_10min.reset_index(inplace=True)
 
     # -------------------1005  binning --------------------------------------
@@ -1054,22 +978,8 @@ def full_calculation(period):
     alarms_df_1005["TimeOff"] = alarms_df_1005["NewTimeOn"]
     alarms_df_1005["NewTimeOn"] = alarms_df_1005["TimeOn"]
 
-    grp_lst_args = iter(
-        [(n, full_range_var) for n in alarms_df_1005.groupby("StationNr")]
-    )
-
-    alarms_df_1005_10min = pool.starmap(alarms_to_10min, grp_lst_args)
-    
-    alarms_df_1005_10min = pd.concat(alarms_df_1005_10min)
-
+    alarms_df_1005_10min = realperiod_10mins(alarms_df_1005)
     alarms_df_1005_10min.reset_index(inplace=True)
-    alarms_df_1005_10min.rename(columns={"index": "TimeStamp"}, inplace=True)
-
-    alarms_df_1005_10min = realperiod_10mins(alarms_df_1005_10min)
-
-    alarms_df_1005_10min.reset_index(inplace=True)
-
-    pool.close()
 
     # ------------------------------------------------------------
 
@@ -1083,6 +993,7 @@ def full_calculation(period):
         columns={"TimeStamp": "TimeStamp"}
     )
 
+    # Toooooooooo slow
     df = merged_last_df.groupby("StationNr").apply(
         lambda df: remove_1005_overlap(df, df.name, alarms_df_1005_10min)
     )
@@ -1474,10 +1385,15 @@ def full_calculation(period):
 
     print(f"warning: first date in alarm = {warning_date}")
 
+    cnt_115_final.drop(
+        cnt_115_final.loc[cnt_115_final["TimeStamp"] == period_start].index,
+        inplace=True,
+    )
+
     return cnt_115_final
 
 
 if __name__ == "__main__":
 
-    full_calculation("2021-11")
+    full_calculation("2022-04")
 
