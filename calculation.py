@@ -11,22 +11,6 @@ import pandas as pd
 
 def zip_to_df(data_type, sql, period):
 
-    # file_name = f'{period}-{data_type}'
-
-    # ZipFile(f'./monthly_data/uploads/{period}/{file_name}.zip',
-    #         'r').extractall(f'./monthly_data/uploads/{period}/')
-
-    # conn_str = (
-    #     r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
-    #     fr'DBQ=.\monthly_data\uploads\{period}\{file_name}.mdb;'
-    # )
-    # print(conn_str)
-    # cnxn = pyodbc.connect(conn_str)
-
-    # df = pd.read_sql(sql, cnxn)
-
-    # return df
-
     file_name = f"{period}-{data_type.lower()}"
 
     data_type_path = f"./monthly_data/uploads/{data_type.upper()}/"
@@ -77,7 +61,7 @@ def cascade(df):
 def apply_cascade(result_sum):
 
     # Sort by alarm ID
-    result_sum.sort_values(["ID"], inplace=True)
+    result_sum.sort_values(["TimeOn", "ID"], inplace=True)
     df = result_sum.groupby("StationNr").apply(cascade)
 
     mask_root = df.TimeOn.values >= df.TimeOffMax.values
@@ -90,7 +74,7 @@ def apply_cascade(result_sum):
     df.loc[mask_children, "NewTimeOn"] = df.loc[mask_children, "TimeOffMax"]
     df.loc[mask_embedded, "NewTimeOn"] = df.loc[mask_embedded, "TimeOff"]
 
-    df.drop(columns=["TimeOffMax"], inplace=True)
+    # df.drop(columns=["TimeOffMax"], inplace=True)
 
     df.reset_index(inplace=True, drop=True)
 
@@ -113,10 +97,7 @@ def realperiod_10mins(last_df):
     last_df["TimeOnRound"] = last_df["NewTimeOn"].dt.ceil("10min")
     last_df["TimeOffRound"] = last_df["TimeOff"].dt.ceil("10min")
     last_df["TimeStamp"] = last_df.apply(
-        lambda row: pd.date_range(
-            row["TimeOnRound"], row["TimeOffRound"], freq="10min"
-        ),
-        axis=1,
+        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"), axis=1,
     )
     last_df = last_df.explode("TimeStamp")
 
@@ -138,42 +119,93 @@ def realperiod_10mins(last_df):
 
     last_df["RealPeriod"] = last_df["10minTimeOff"] - last_df["10minTimeOn"]
 
-    last_df.loc[mask_siemens, "Period Siemens(s)"] = last_df.loc[
-        mask_siemens, "RealPeriod"
-    ]
+    last_df.loc[mask_siemens, "Period Siemens(s)"] = last_df.loc[mask_siemens, "RealPeriod"]
     last_df.loc[mask_tarec, "Period Tarec(s)"] = last_df.loc[mask_tarec, "RealPeriod"]
 
     return last_df
 
 
-def remove_1005_overlap(merged_last_df, StationNr, alarms_df_1005_10min):
-    # if len(merged_last_df) <= 1:
-    #     return merged_last_df
-    # print(merged_last_df)
-    for i, j in merged_last_df.iterrows():
-        if j["Alarmcode"] != 1005:
-            df = alarms_df_1005_10min.loc[
-                alarms_df_1005_10min["StationNr"] == StationNr
-            ]
-            if df.empty:
-                break
-            df["j_10minTimeOn"] = j["10minTimeOn"]
-            df["j_10minTimeOff"] = j["10minTimeOff"]
-            df["Timedelta(0)"] = pd.Timedelta(0)
-            latest_start = df[["10minTimeOn", "j_10minTimeOn"]].max(1)
-            earliest_end = df[["10minTimeOff", "j_10minTimeOff"]].min(1)
+def remove_1005_overlap(df):  # input => alarmsresultssum
 
-            df["delta"] = earliest_end - latest_start
+    df = df[
+        [
+            "TimeOn",
+            "TimeOff",
+            "StationNr",
+            "Alarmcode",
+            "Parameter",
+            "ID",
+            "NewTimeOn",
+            "OldTimeOn",
+            "OldTimeOff",
+            "UK Text",
+            "Type Selected",
+            "Error Type",
+            "RealPeriod",
+        ]
+    ].copy()
+    df.drop(df.query("RealPeriod == @pd.Timedelta(0) & Alarmcode != 1005").index, inplace=True)
 
-            df["Overlap"] = df[["delta", "Timedelta(0)"]].max(1)
+    df.reset_index(drop=True, inplace=True)
+    df_1005 = df.query("Alarmcode == 1005")
 
-            merged_last_df.loc[i, "RealPeriod"] = (
-                merged_last_df.loc[i, "RealPeriod"] - df["Overlap"].sum()
-            )
-    return merged_last_df
+    df["TimeOn"] = df["NewTimeOn"]
+
+    for i, j in df_1005.iterrows():
+
+        overlap_end = (
+            (df["TimeOn"] <= j["TimeOn"])
+            & (df["TimeOn"] <= j["TimeOff"])
+            & (df["TimeOff"] > j["TimeOn"])
+            & (df["TimeOff"] <= j["TimeOff"])
+            & (df["StationNr"] == j["StationNr"])
+        )
+
+        overlap_start = (
+            (df["TimeOn"] >= j["TimeOn"])
+            & (df["TimeOn"] <= j["TimeOff"])
+            & (df["TimeOff"] > j["TimeOn"])
+            & (df["TimeOff"] >= j["TimeOff"])
+            & (df["StationNr"] == j["StationNr"])
+        )
+
+        embedded = (
+            (df["TimeOn"] < j["TimeOn"])
+            & (df["TimeOff"] > j["TimeOff"])
+            & (df["StationNr"] == j["StationNr"])
+        )
+        df_helper = df.loc[embedded].copy()
+
+        df.loc[overlap_start, "TimeOn"] = j["TimeOff"]
+        df.loc[overlap_end, "TimeOff"] = j["TimeOn"]
+
+        # ---------------------------------------------------
+        if embedded.sum():
+            df.loc[embedded, "TimeOff"] = j["TimeOn"]
+
+            df_helper["TimeOn"] = j["TimeOff"]
+            df = pd.concat([df, df_helper]).sort_values(["TimeOn", "ID"])
+
+        # ---------------------------------------------------
+        # df.reset_index(drop=True, inplace=True)
+        reverse_embedded = (
+            (df["TimeOn"] >= j["TimeOn"])
+            & (df["TimeOff"] <= j["TimeOff"])
+            & (df["StationNr"] == j["StationNr"])
+        )
+        if reverse_embedded.sum():
+            # df.drop(df.loc[reverse_embedded].index, inplace=True)
+            # df = df.loc[~df.index.drop(df.loc[reverse_embedded].index)]
+            df.loc[reverse_embedded, "TimeOn"] = df.loc[reverse_embedded, "TimeOff"]
+
+    df.loc[df["Alarmcode"] == 1005, "TimeOn"] = df.loc[df["Alarmcode"] == 1005, "OldTimeOn"]
+
+    df = apply_cascade(df)
+
+    return df
 
 
-def full_range(df, period, next_period, full_range_var):
+def full_range(df, full_range_var):
 
     new_df = pd.DataFrame(index=full_range_var)
 
@@ -241,9 +273,7 @@ def inner_fill(df, name, alarms_result_sum):
             df["Parameter"].iat[j + 1] in {"Stopped", "Stopped;Stopped"}
         ):
 
-            result_turbine = alarms_result_sum.loc[
-                (alarms_result_sum.StationNr == name)
-            ].copy()
+            result_turbine = alarms_result_sum.loc[(alarms_result_sum.StationNr == name)].copy()
 
             TimeOn = result_turbine.loc[
                 (result_turbine.TimeOn.shift(-1) < df["TimeOn"].iat[j + 1])
@@ -404,13 +434,9 @@ def outer_fill_20(df, period):
 def inner_fill_20(df, name, alarms_result_sum):
 
     for j in df.index[:-1]:
-        if (df["Parameter"].iat[j] == "Stopped") & (
-            df["Parameter"].iat[j + 1] == "Stopped"
-        ):
+        if (df["Parameter"].iat[j] == "Stopped") & (df["Parameter"].iat[j + 1] == "Stopped"):
 
-            result_turbine = alarms_result_sum.loc[
-                (alarms_result_sum.StationNr == name)
-            ].copy()
+            result_turbine = alarms_result_sum.loc[(alarms_result_sum.StationNr == name)].copy()
 
             TimeOn = result_turbine.loc[
                 (result_turbine.TimeOn.shift(-1) < df["TimeOn"].iat[j + 1])
@@ -429,9 +455,7 @@ def inner_fill_20(df, name, alarms_result_sum):
             df = df.append(line, ignore_index=False)
             df = df.sort_index().reset_index(drop=True)
 
-        elif (df["Parameter"].iat[j] == "Resumed") & (
-            df["Parameter"].iat[j + 1] == "Resumed"
-        ):
+        elif (df["Parameter"].iat[j] == "Resumed") & (df["Parameter"].iat[j + 1] == "Resumed"):
 
             TimeOn = alarms_result_sum.loc[
                 (alarms_result_sum.StationNr == name)
@@ -439,9 +463,7 @@ def inner_fill_20(df, name, alarms_result_sum):
                 & (alarms_result_sum.TimeOff > df["TimeOn"].iat[j])
             ].TimeOn.min()
 
-            result_turbine = alarms_result_sum.loc[
-                (alarms_result_sum.StationNr == name)
-            ].copy()
+            result_turbine = alarms_result_sum.loc[(alarms_result_sum.StationNr == name)].copy()
 
             TimeOn = result_turbine.loc[
                 (result_turbine.TimeOff > df["TimeOn"].iat[j])
@@ -507,9 +529,7 @@ def fill_20(alarms, period, alarms_result_sum):
 
         alarms_20 = alarms_20.sort_values(["StationNr", "TimeOn"])
 
-        alarms_20["Parameter"] = alarms_20["Alarmcode"].map(
-            {20: "Resumed", 25: "Stopped"}
-        )
+        alarms_20["Parameter"] = alarms_20["Alarmcode"].map({20: "Resumed", 25: "Stopped"})
 
         alarms_20_filled_rows = alarms_20.groupby("StationNr").apply(
             lambda df: fill_20_apply(df, period, df.name, alarms_result_sum)
@@ -629,12 +649,8 @@ class read_files:
             # on_bad_lines="skip",
         ).iloc[:-1]
 
-        alarms.loc[:, "TimeOn"] = pd.to_datetime(
-            alarms["TimeOn"], format="%Y-%m-%d %H:%M:%S.%f"
-        )
-        alarms.loc[:, "TimeOff"] = pd.to_datetime(
-            alarms["TimeOff"], format="%Y-%m-%d %H:%M:%S.%f"
-        )
+        alarms.loc[:, "TimeOn"] = pd.to_datetime(alarms["TimeOn"], format="%Y-%m-%d %H:%M:%S.%f")
+        alarms.loc[:, "TimeOff"] = pd.to_datetime(alarms["TimeOff"], format="%Y-%m-%d %H:%M:%S.%f")
 
         alarms = alarms[alarms.StationNr >= 2307405]
         alarms = alarms[alarms.StationNr <= 2307535].reset_index(drop=True)
@@ -669,9 +685,7 @@ class read_files:
         met = zip_to_df("met", sql_met, period)
 
         met = met.pivot(
-            "TimeStamp",
-            "StationId",
-            ["met_WindSpeedRot_mean", "met_WinddirectionRot_mean"],
+            "TimeStamp", "StationId", ["met_WindSpeedRot_mean", "met_WinddirectionRot_mean"],
         )
 
         met.columns = met.columns.to_flat_index()
@@ -679,8 +693,7 @@ class read_files:
         met.reset_index(inplace=True)
 
         met.columns = [
-            "_".join(str(v) for v in tup) if type(tup) is tuple else tup
-            for tup in met.columns
+            "_".join(str(v) for v in tup) if type(tup) is tuple else tup for tup in met.columns
         ]
 
         return met
@@ -807,9 +820,7 @@ def full_calculation(period):
     alarms["OldTimeOn"] = alarms["TimeOn"]
     alarms["OldTimeOff"] = alarms["TimeOff"]
 
-    print(
-        f"TimeOff NAs = {alarms.loc[alarms.Alarmcode.isin(alarms_0_1)].TimeOff.isna().sum()}"
-    )
+    print(f"TimeOff NAs = {alarms.loc[alarms.Alarmcode.isin(alarms_0_1)].TimeOff.isna().sum()}")
 
     if alarms.loc[alarms.Alarmcode.isin(alarms_0_1)].TimeOff.isna().sum():
         print(
@@ -864,6 +875,7 @@ def full_calculation(period):
 
     # apply cascade
     alarms_result_sum = apply_cascade(result_sum)
+    alarms_result_sum = remove_1005_overlap(alarms_result_sum)
 
     # ----------------openning pool for multiprocessing------------------------
     pool = mp.Pool(processes=(mp.cpu_count() - 0))
@@ -892,8 +904,7 @@ def full_calculation(period):
         alarms_df_2006_10min.reset_index(inplace=True)
 
         alarms_df_2006_10min.rename(
-            columns={"StationNr": "StationId", "RealPeriod": "Duration 2006(s)"},
-            inplace=True,
+            columns={"StationNr": "StationId", "RealPeriod": "Duration 2006(s)"}, inplace=True,
         )
 
         alarms_df_2006_10min["Duration 2006(s)"] = alarms_df_2006_10min[
@@ -902,9 +913,7 @@ def full_calculation(period):
 
     else:
         print("no 2006")
-        alarms_df_2006_10min = pd.DataFrame(
-            columns={"TimeStamp", "Duration 2006(s)", "StationId"}
-        )
+        alarms_df_2006_10min = pd.DataFrame(columns={"TimeStamp", "Duration 2006(s)", "StationId"})
     # ------------------115 filling binning -----------------------------------
 
     print("filling 115")
@@ -914,9 +923,7 @@ def full_calculation(period):
     print("115 filled")
 
     print("upsampling 115")
-    grp_lst_args = iter(
-        [(n, period, "115") for n in alarms_115_filled.groupby("StationNr")]
-    )
+    grp_lst_args = iter([(n, period, "115") for n in alarms_115_filled.groupby("StationNr")])
 
     alarms_115_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
 
@@ -933,9 +940,7 @@ def full_calculation(period):
         alarms.query("@period_start < TimeOn < @period_end"), period, alarms_result_sum
     )
     print("20 filled")
-    grp_lst_args = iter(
-        [(n, period, "20-25") for n in alarms_20_filled.groupby("StationNr")]
-    )
+    grp_lst_args = iter([(n, period, "20-25") for n in alarms_20_filled.groupby("StationNr")])
 
     print("upsampling 20-25")
     alarms_20_filled_binned = pool.starmap(upsample_115_20, grp_lst_args)
@@ -946,14 +951,14 @@ def full_calculation(period):
 
     alarms_20_filled_binned.rename(columns={"index": "TimeStamp"}, inplace=True)
 
-    # Remove previous period alarms
-    mask = (
-        (alarms_result_sum["TimeOn"].dt.month == period_month)
-        | (alarms_result_sum["TimeOff"].dt.month == period_month)
-        | (alarms_result_sum["TimeOff"] == period_end)
-    )
+    # # Remove previous period alarms
+    # mask = (
+    #     (alarms_result_sum["TimeOn"].dt.month == period_month)
+    #     | (alarms_result_sum["TimeOff"].dt.month == period_month)
+    #     | (alarms_result_sum["TimeOff"] == period_end)
+    # )
 
-    alarms_result_sum = alarms_result_sum.loc[mask]
+    # alarms_result_sum = alarms_result_sum.loc[mask]
     pool.close()
 
     # ----------------------- binning --------------------------------------
@@ -966,45 +971,12 @@ def full_calculation(period):
     ].copy()
 
     alarms_df_clean_10min = realperiod_10mins(alarms_df_clean)
-    alarms_df_clean_10min.reset_index(inplace=True)
+    alarms_df_clean_10min.reset_index(inplace=True, drop=True)
 
-    # -------------------1005  binning --------------------------------------
-
-    print("binning 1005")
-
-    alarms_df_1005 = alarms_result_sum.loc[
-        (alarms_result_sum["Alarmcode"] == 1005)
-    ].copy()
-    alarms_df_1005["TimeOff"] = alarms_df_1005["NewTimeOn"]
-    alarms_df_1005["NewTimeOn"] = alarms_df_1005["TimeOn"]
-
-    alarms_df_1005_10min = realperiod_10mins(alarms_df_1005)
-    alarms_df_1005_10min.reset_index(inplace=True)
-
-    # ------------------------------------------------------------
-
-    merged_last_df = (
-        pd.concat([alarms_df_clean_10min, alarms_df_1005_10min])
-        .sort_values(["StationNr", "10minTimeOn"])
-        .reset_index()
-    )
-
-    merged_last_df = merged_last_df.drop("index", axis=1).rename(
-        columns={"TimeStamp": "TimeStamp"}
-    )
-
-    # Toooooooooo slow
-    df = merged_last_df.groupby("StationNr").apply(
-        lambda df: remove_1005_overlap(df, df.name, alarms_df_1005_10min)
-    )
-
-    mask_siemens = df["Error Type"] == 1
-    mask_tarec = df["Error Type"] == 0
-    df.loc[mask_siemens, "Period Siemens(s)"] = df.loc[mask_siemens, "RealPeriod"]
-    df.loc[mask_tarec, "Period Tarec(s)"] = df.loc[mask_tarec, "RealPeriod"]
+    # # ----------------------- ---------------------------------
 
     alarms_binned = (
-        df.groupby(["StationNr", "TimeStamp"])
+        alarms_df_clean_10min.groupby(["StationNr", "TimeStamp"])
         .agg(
             {
                 "RealPeriod": "sum",
@@ -1018,7 +990,7 @@ def full_calculation(period):
 
     alarms_binned = (
         alarms_binned.groupby("StationNr")
-        .apply(lambda df: full_range(df, period, next_period, full_range_var))
+        .apply(lambda df: full_range(df, full_range_var))
         .reset_index()
         .rename(
             columns={
@@ -1033,6 +1005,10 @@ def full_calculation(period):
     alarms_binned["Period 0(s)"] = alarms_binned["Period 0(s)"].dt.total_seconds()
     alarms_binned["Period 1(s)"] = alarms_binned["Period 1(s)"].dt.total_seconds()
     alarms_binned["RealPeriod"] = alarms_binned["RealPeriod"].dt.total_seconds()
+
+    alarms_binned.drop(
+        alarms_binned.loc[alarms_binned["TimeStamp"] == period_start].index, inplace=True,
+    )
 
     print("Alarms Binned")
 
@@ -1051,36 +1027,22 @@ def full_calculation(period):
     ).reset_index(drop=True)
 
     # merging last dataframe with power
-    cnt_alarms_minpwr = pd.merge(
-        cnt_alarms, grd, on=["TimeStamp", "StationId"], how="left"
-    )
+    cnt_alarms_minpwr = pd.merge(cnt_alarms, grd, on=["TimeStamp", "StationId"], how="left")
 
     cnt_alarms_minpwr.reset_index(drop=True, inplace=True)
 
     # merging last dataframe with 115 upsampled
     cnt_115 = pd.merge(
-        cnt_alarms_minpwr,
-        alarms_115_filled_binned,
-        on=["StationId", "TimeStamp"],
-        how="left",
+        cnt_alarms_minpwr, alarms_115_filled_binned, on=["StationId", "TimeStamp"], how="left",
     )
 
     # merging last dataframe with 20/25 upsampled
-    cnt_115 = pd.merge(
-        cnt_115, alarms_20_filled_binned, on=["StationId", "TimeStamp"], how="left"
-    )
+    cnt_115 = pd.merge(cnt_115, alarms_20_filled_binned, on=["StationId", "TimeStamp"], how="left")
 
     # merging last dataframe with turbine windspeed data
     cnt_115 = pd.merge(
         cnt_115,
-        tur[
-            [
-                "TimeStamp",
-                "StationId",
-                "wtc_AcWindSp_mean",
-                "wtc_ActualWindDirection_mean",
-            ]
-        ],
+        tur[["TimeStamp", "StationId", "wtc_AcWindSp_mean", "wtc_ActualWindDirection_mean",]],
         on=("TimeStamp", "StationId"),
         how="left",
     )
@@ -1144,9 +1106,7 @@ def full_calculation(period):
 
     cnt_115_final = cnt_115_no.append(cnt_115_n, sort=False)
 
-    cnt_115_final = cnt_115_final.sort_values(["StationId", "TimeStamp"]).reset_index(
-        drop=True
-    )
+    cnt_115_final = cnt_115_final.sort_values(["StationId", "TimeStamp"]).reset_index(drop=True)
 
     cnt_115_final["EL"] = cnt_115_final["Epot"] - cnt_115_final["wtc_kWG1TotE_accum"]
 
@@ -1170,15 +1130,15 @@ def full_calculation(period):
         * (cnt_115_final["EL"])
     ).fillna(0)
 
-    cnt_115_final.loc[
-        cnt_115_final["Duration 115(s)"] > 0, "EL 115"
-    ] = cnt_115_final.loc[cnt_115_final["Duration 115(s)"] > 0, "EL"]
+    cnt_115_final.loc[cnt_115_final["Duration 115(s)"] > 0, "EL 115"] = cnt_115_final.loc[
+        cnt_115_final["Duration 115(s)"] > 0, "EL"
+    ]
 
     cnt_115_final["EL 115"] = cnt_115_final["EL 115"].fillna(0)
 
-    cnt_115_final.loc[
-        cnt_115_final["Duration 20-25(s)"] > 0, "EL 20-25"
-    ] = cnt_115_final.loc[cnt_115_final["Duration 20-25(s)"] > 0, "EL"]
+    cnt_115_final.loc[cnt_115_final["Duration 20-25(s)"] > 0, "EL 20-25"] = cnt_115_final.loc[
+        cnt_115_final["Duration 20-25(s)"] > 0, "EL"
+    ]
 
     cnt_115_final["EL 20-25"] = cnt_115_final["EL 20-25"].fillna(0)
 
@@ -1187,8 +1147,7 @@ def full_calculation(period):
     )
 
     max_115_ELX_ELNX = pd.concat(
-        [(cnt_115_final["ELX"] + cnt_115_final["ELNX"]), cnt_115_final["EL 115"]],
-        axis=1,
+        [(cnt_115_final["ELX"] + cnt_115_final["ELNX"]), cnt_115_final["EL 115"]], axis=1,
     ).max(axis=1)
 
     cnt_115_final["EL_indefini"] = cnt_115_final["EL"] - max_115_ELX_ELNX
@@ -1199,9 +1158,9 @@ def full_calculation(period):
         "wtc_AcWindSp_mean"
     ].shift()
 
-    cnt_115_final["next_AcWindSp"] = cnt_115_final.groupby("TimeStamp")[
-        "wtc_AcWindSp_mean"
-    ].shift(-1)
+    cnt_115_final["next_AcWindSp"] = cnt_115_final.groupby("TimeStamp")["wtc_AcWindSp_mean"].shift(
+        -1
+    )
 
     cnt_115_final["prev_ActPower_min"] = cnt_115_final.groupby("TimeStamp")[
         "wtc_ActPower_min"
@@ -1211,21 +1170,13 @@ def full_calculation(period):
         "wtc_ActPower_min"
     ].shift(-1)
 
-    cnt_115_final["prev_Alarme"] = cnt_115_final.groupby("TimeStamp")[
-        "RealPeriod"
-    ].shift()
+    cnt_115_final["prev_Alarme"] = cnt_115_final.groupby("TimeStamp")["RealPeriod"].shift()
 
-    cnt_115_final["next_Alarme"] = cnt_115_final.groupby("TimeStamp")[
-        "RealPeriod"
-    ].shift(-1)
+    cnt_115_final["next_Alarme"] = cnt_115_final.groupby("TimeStamp")["RealPeriod"].shift(-1)
 
-    cnt_115_final["DiffV1"] = (
-        cnt_115_final.prev_AcWindSp - cnt_115_final.wtc_AcWindSp_mean
-    )
+    cnt_115_final["DiffV1"] = cnt_115_final.prev_AcWindSp - cnt_115_final.wtc_AcWindSp_mean
 
-    cnt_115_final["DiffV2"] = (
-        cnt_115_final.next_AcWindSp - cnt_115_final.wtc_AcWindSp_mean
-    )
+    cnt_115_final["DiffV2"] = cnt_115_final.next_AcWindSp - cnt_115_final.wtc_AcWindSp_mean
 
     # -------------------------------------------------------------------------
 
@@ -1264,11 +1215,7 @@ def full_calculation(period):
         etape1 = (
             (df.DiffV1 > 1)
             & (df.DiffV2 > 1)
-            & (
-                (df.prev_AcWindSp >= 5)
-                | (df.next_AcWindSp >= 5)
-                | (df.wtc_AcWindSp_mean >= 5)
-            )
+            & ((df.prev_AcWindSp >= 5) | (df.next_AcWindSp >= 5) | (df.wtc_AcWindSp_mean >= 5))
         )
 
         mask_1 = ~(
@@ -1346,12 +1293,8 @@ def full_calculation(period):
     cnt_115_final["EL_Misassigned"].fillna(0, inplace=True)
     # -------------------------------------------------------------------------
 
-    columns_toround = list(
-        set(cnt_115_final.columns) - set(("StationId", "TimeStamp", "UK Text"))
-    )
-    cnt_115_final[columns_toround] = (
-        cnt_115_final[columns_toround].round(2).astype(np.float32)
-    )
+    columns_toround = list(set(cnt_115_final.columns) - set(("StationId", "TimeStamp", "UK Text")))
+    cnt_115_final[columns_toround] = cnt_115_final[columns_toround].round(2).astype(np.float32)
 
     # -------------------------------------------------------------------------
 
@@ -1386,8 +1329,7 @@ def full_calculation(period):
     print(f"warning: first date in alarm = {warning_date}")
 
     cnt_115_final.drop(
-        cnt_115_final.loc[cnt_115_final["TimeStamp"] == period_start].index,
-        inplace=True,
+        cnt_115_final.loc[cnt_115_final["TimeStamp"] == period_start].index, inplace=True,
     )
 
     return cnt_115_final
