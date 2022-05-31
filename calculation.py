@@ -19,7 +19,7 @@ def zip_to_df(data_type, sql, period):
 
     conn_str = (
         r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-        fr"DBQ={data_type_path}{file_name}.mdb;"
+        rf"DBQ={data_type_path}{file_name}.mdb;"
     )
     print(conn_str)
     cnxn = pyodbc.connect(conn_str)
@@ -97,7 +97,8 @@ def realperiod_10mins(last_df):
     last_df["TimeOnRound"] = last_df["NewTimeOn"].dt.ceil("10min")
     last_df["TimeOffRound"] = last_df["TimeOff"].dt.ceil("10min")
     last_df["TimeStamp"] = last_df.apply(
-        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"), axis=1,
+        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"),
+        axis=1,
     )
     last_df = last_df.explode("TimeStamp")
 
@@ -151,7 +152,7 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
 
     df["TimeOn"] = df["NewTimeOn"]
 
-    for i, j in df_1005.iterrows():
+    for _, j in df_1005.iterrows():
 
         overlap_end = (
             (df["TimeOn"] <= j["TimeOn"])
@@ -159,6 +160,7 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
             & (df["TimeOff"] > j["TimeOn"])
             & (df["TimeOff"] <= j["TimeOff"])
             & (df["StationNr"] == j["StationNr"])
+            & (df["Alarmcode"] != 1005)
         )
 
         overlap_start = (
@@ -167,12 +169,14 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
             & (df["TimeOff"] > j["TimeOn"])
             & (df["TimeOff"] >= j["TimeOff"])
             & (df["StationNr"] == j["StationNr"])
+            & (df["Alarmcode"] != 1005)
         )
 
         embedded = (
             (df["TimeOn"] < j["TimeOn"])
             & (df["TimeOff"] > j["TimeOff"])
             & (df["StationNr"] == j["StationNr"])
+            & (df["Alarmcode"] != 1005)
         )
         df_helper = df.loc[embedded].copy()
 
@@ -192,6 +196,7 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
             (df["TimeOn"] >= j["TimeOn"])
             & (df["TimeOff"] <= j["TimeOff"])
             & (df["StationNr"] == j["StationNr"])
+            & (df["Alarmcode"] != 1005)
         )
         if reverse_embedded.sum():
             # df.drop(df.loc[reverse_embedded].index, inplace=True)
@@ -642,10 +647,10 @@ class read_files:
         # alarms.loc[:, "TimeOn"] = sqldate_to_datetime(alarms["TimeOn"].copy())
         # alarms.loc[:, "TimeOff"] = sqldate_to_datetime(alarms["TimeOff"].copy())
 
-        alarms = pd.read_table(
-            f"./monthly_data/uploads/SUM/{period}-sum.rpt ",
-            sep="|",
-            skipfooter=2
+        alarms = pd.read_csv(
+            f"./monthly_data/uploads/SUM/{period}-sum.csv ",
+            # sep="|",
+            # skipfooter=2
             # on_bad_lines="skip",
         ).iloc[:-1]
 
@@ -685,7 +690,7 @@ class read_files:
         met = zip_to_df("met", sql_met, period)
 
         met = met.pivot(
-            "TimeStamp", "StationId", ["met_WindSpeedRot_mean", "met_WinddirectionRot_mean"],
+            "TimeStamp", "StationId", ["met_WindSpeedRot_mean", "met_WinddirectionRot_mean"]
         )
 
         met.columns = met.columns.to_flat_index()
@@ -846,15 +851,13 @@ def full_calculation(period):
         inplace=True,
     )
 
-    alarms.drop(
-        alarms.query("(TimeOn > @period_end)").index, inplace=True,
-    )
+    alarms.drop(alarms.query("(TimeOn > @period_end)").index, inplace=True)
     alarms.reset_index(drop=True, inplace=True)
     # ------------------------------Alarms starting before period start -----------------
     warning_date = alarms.TimeOn.min()
 
     alarms.loc[
-        (alarms.TimeOn < period_start) & (alarms.Alarmcode.isin(alarms_0_1)), "TimeOn",
+        (alarms.TimeOn < period_start) & (alarms.Alarmcode.isin(alarms_0_1)), "TimeOn"
     ] = period_start
 
     # ----dropping non 1 0 alarms
@@ -904,7 +907,7 @@ def full_calculation(period):
         alarms_df_2006_10min.reset_index(inplace=True)
 
         alarms_df_2006_10min.rename(
-            columns={"StationNr": "StationId", "RealPeriod": "Duration 2006(s)"}, inplace=True,
+            columns={"StationNr": "StationId", "RealPeriod": "Duration 2006(s)"}, inplace=True
         )
 
         alarms_df_2006_10min["Duration 2006(s)"] = alarms_df_2006_10min[
@@ -1007,7 +1010,7 @@ def full_calculation(period):
     alarms_binned["RealPeriod"] = alarms_binned["RealPeriod"].dt.total_seconds()
 
     alarms_binned.drop(
-        alarms_binned.loc[alarms_binned["TimeStamp"] == period_start].index, inplace=True,
+        alarms_binned.loc[alarms_binned["TimeStamp"] == period_start].index, inplace=True
     )
 
     print("Alarms Binned")
@@ -1033,7 +1036,7 @@ def full_calculation(period):
 
     # merging last dataframe with 115 upsampled
     cnt_115 = pd.merge(
-        cnt_alarms_minpwr, alarms_115_filled_binned, on=["StationId", "TimeStamp"], how="left",
+        cnt_alarms_minpwr, alarms_115_filled_binned, on=["StationId", "TimeStamp"], how="left"
     )
 
     # merging last dataframe with 20/25 upsampled
@@ -1042,7 +1045,7 @@ def full_calculation(period):
     # merging last dataframe with turbine windspeed data
     cnt_115 = pd.merge(
         cnt_115,
-        tur[["TimeStamp", "StationId", "wtc_AcWindSp_mean", "wtc_ActualWindDirection_mean",]],
+        tur[["TimeStamp", "StationId", "wtc_AcWindSp_mean", "wtc_ActualWindDirection_mean"]],
         on=("TimeStamp", "StationId"),
         how="left",
     )
@@ -1147,7 +1150,7 @@ def full_calculation(period):
     )
 
     max_115_ELX_ELNX = pd.concat(
-        [(cnt_115_final["ELX"] + cnt_115_final["ELNX"]), cnt_115_final["EL 115"]], axis=1,
+        [(cnt_115_final["ELX"] + cnt_115_final["ELNX"]), cnt_115_final["EL 115"]], axis=1
     ).max(axis=1)
 
     cnt_115_final["EL_indefini"] = cnt_115_final["EL"] - max_115_ELX_ELNX
@@ -1329,7 +1332,7 @@ def full_calculation(period):
     print(f"warning: first date in alarm = {warning_date}")
 
     cnt_115_final.drop(
-        cnt_115_final.loc[cnt_115_final["TimeStamp"] == period_start].index, inplace=True,
+        cnt_115_final.loc[cnt_115_final["TimeStamp"] == period_start].index, inplace=True
     )
 
     return cnt_115_final
@@ -1338,4 +1341,3 @@ def full_calculation(period):
 if __name__ == "__main__":
 
     full_calculation("2022-04")
-
