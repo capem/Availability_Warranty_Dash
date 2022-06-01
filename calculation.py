@@ -648,18 +648,18 @@ class read_files:
         # alarms.loc[:, "TimeOff"] = sqldate_to_datetime(alarms["TimeOff"].copy())
 
         alarms = pd.read_csv(
-            f"./monthly_data/uploads/SUM/{period}-sum.csv ",
-            # sep="|",
-            # skipfooter=2
+            f"./monthly_data/uploads/SUM/{period}-sum.rpt",
+            sep="|",
+            skipfooter=2
             # on_bad_lines="skip",
-        ).iloc[:-1]
+        )
+        alarms.dropna(subset=["Alarmcode"], inplace=True)
 
         alarms.loc[:, "TimeOn"] = pd.to_datetime(alarms["TimeOn"], format="%Y-%m-%d %H:%M:%S.%f")
         alarms.loc[:, "TimeOff"] = pd.to_datetime(alarms["TimeOff"], format="%Y-%m-%d %H:%M:%S.%f")
 
         alarms = alarms[alarms.StationNr >= 2307405]
         alarms = alarms[alarms.StationNr <= 2307535].reset_index(drop=True)
-        alarms.dropna(subset=["Alarmcode"], inplace=True)
         alarms.reset_index(drop=True, inplace=True)
         alarms["Alarmcode"] = alarms.Alarmcode.astype(int)
         alarms["Parameter"] = alarms.Parameter.str.replace(" ", "")
