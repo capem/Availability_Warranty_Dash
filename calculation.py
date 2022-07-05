@@ -1,3 +1,4 @@
+from operator import index
 from dateutil.relativedelta import relativedelta
 from datetime import datetime as dt
 from pandas.core.indexing import is_nested_tuple
@@ -7,7 +8,8 @@ import os
 import numpy as np
 import multiprocessing as mp
 import pandas as pd
-
+import urllib
+from sqlalchemy import create_engine
 
 def zip_to_df(data_type, sql, period):
 
@@ -19,14 +21,12 @@ def zip_to_df(data_type, sql, period):
 
     conn_str = (
         r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-        rf"DBQ={data_type_path}{file_name}.mdb;"
+        fr"DBQ={data_type_path}{file_name}.mdb;"
     )
-    print(conn_str)
-    cnxn = pyodbc.connect(conn_str)
+    conn_str = f"access+pyodbc:///?odbc_connect={urllib.parse.quote_plus(conn_str)}"
+    cnxn = create_engine(conn_str, echo=True)
 
-    df = pd.read_sql(sql, cnxn)
-
-    return df
+    return pd.read_sql(sql, cnxn)
 
 
 def sqldate_to_datetime(column):
@@ -109,8 +109,8 @@ def realperiod_10mins(last_df):
     mask_siemens = last_df["Error Type"] == 1
     mask_tarec = last_df["Error Type"] == 0
 
-    df_TimeOn = last_df[["TimeStamp", "NewTimeOn"]]
-    df_TimeOff = last_df[["TimeStamp", "TimeOff"]]
+    df_TimeOn = last_df[["TimeStamp", "NewTimeOn"]].copy()
+    df_TimeOff = last_df[["TimeStamp", "TimeOff"]].copy()
 
     df_TimeOn.loc[:, "TimeStamp"] = df_TimeOn["TimeStamp"] - pd.Timedelta(minutes=10)
 
@@ -145,7 +145,8 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
             "RealPeriod",
         ]
     ].copy()
-    df.drop(df.query("RealPeriod == @pd.Timedelta(0) & Alarmcode != 1005").index, inplace=True)
+    idx_to_drop = df.loc[(df.RealPeriod == pd.Timedelta(0)) & (df.Alarmcode != 1005)].index
+    df.drop(idx_to_drop, inplace=True)
 
     df.reset_index(drop=True, inplace=True)
     df_1005 = df.query("Alarmcode == 1005")
@@ -556,8 +557,8 @@ def fill_20(alarms, period, alarms_result_sum):
         del missing_20["StationNr"]
         missing_20 = missing_20.reset_index(level=0)
 
-        alarms_20_filled_rows.to_excel(path + f"{period}-cut.xlsx")
-        missing_20.to_excel(path + f"{period}-cut-missing.xlsx")
+        alarms_20_filled_rows.to_excel(path + f"{period}-cut.xlsx", index=False)
+        missing_20.to_excel(path + f"{period}-cut-missing.xlsx", index=False)
     return alarms_20_filled_rows
 
 
@@ -757,7 +758,7 @@ def full_calculation(period):
 
     # ----------------------Sanity check---------------------------
     sanity_grd = grd.query(
-        """-1000 <= wtc_ActPower_min <= 2500 & -1000 <= wtc_ActPower_max <= 2500 & -1000 <= wtc_ActPower_mean <= 2500"""
+        """-1000 <= wtc_ActPower_min <= 2600 & -1000 <= wtc_ActPower_max <= 2600 & -1000 <= wtc_ActPower_mean <= 2600"""
     ).index
     sanity_cnt = cnt.query(
         """-500 <= wtc_kWG1Tot_accum <= 500 & 0 <= wtc_kWG1TotE_accum <= 500"""
