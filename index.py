@@ -32,4 +32,4 @@ def display_page(pathname):
 if __name__ == "__main__":
     app.run_server(debug=True, port=80, host="localhost")
     # app.run_server()
-    # waitress-serve --port=80 --channel-timeout=400 --threads=6 index:app.server
+    # waitress-serve --port=80 --host=localhost --channel-timeout=400 --threads=6 index:app.server
