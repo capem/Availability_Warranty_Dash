@@ -1301,35 +1301,6 @@ def full_calculation(period):
     cnt_115_final[columns_toround] = cnt_115_final[columns_toround].round(2).astype(np.float32)
 
     # -------------------------------------------------------------------------
-
-    Ep = cnt_115_final["wtc_kWG1TotE_accum"].sum()
-    EL = cnt_115_final["EL"].sum()
-    ELX = cnt_115_final["ELX"].sum()
-    ELNX = cnt_115_final["ELNX"].sum()
-    EL_2006 = cnt_115_final["EL_2006"].sum()
-    EL_PowerRed = cnt_115_final["EL_PowerRed"].sum()
-    EL_Misassigned = cnt_115_final["EL_Misassigned"].sum()
-
-    Epot = cnt_115_final["Epot"].sum()
-
-    ELX_eq = ELX - EL_Misassigned
-    ELNX_eq = ELNX + EL_2006 + EL_PowerRed + EL_Misassigned
-    Epot_eq = Ep + ELX_eq + ELNX_eq
-
-    EL_wind = cnt_115_final["EL_wind"].sum()
-    EL_wind_start = cnt_115_final["EL_wind_start"].sum()
-    EL_alarm_start = cnt_115_final["EL_alarm_start"].sum()
-
-    MAA_brut = round(100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006 + EL_PowerRed), 2)
-
-    MAA_brut_mis = round(100 * (Ep + ELX_eq) / (Epot_eq), 2)
-
-    MAA_indefni_adjusted = (
-        100 * (Ep + ELX) / (Ep + EL - (EL_wind + EL_wind_start + EL_alarm_start))
-    )
-
-    print(MAA_brut, MAA_brut_mis, MAA_indefni_adjusted)
-
     print(f"warning: first date in alarm = {warning_date}")
 
     cnt_115_final.drop(
