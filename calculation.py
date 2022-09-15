@@ -11,6 +11,14 @@ import pandas as pd
 import urllib
 from sqlalchemy import create_engine
 
+from scipy.stats import binned_statistic
+
+# import matplotlib.pyplot as plt
+from scipy.integrate import quad
+from scipy import integrate
+from scipy.interpolate import interp1d
+
+
 def zip_to_df(data_type, sql, period):
 
     file_name = f"{period}-{data_type.lower()}"
@@ -21,12 +29,14 @@ def zip_to_df(data_type, sql, period):
 
     conn_str = (
         r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-        fr"DBQ={data_type_path}{file_name}.mdb;"
+        rf"DBQ={data_type_path}{file_name}.mdb;"
     )
     conn_str = f"access+pyodbc:///?odbc_connect={urllib.parse.quote_plus(conn_str)}"
     cnxn = create_engine(conn_str, echo=True)
 
-    return pd.read_sql(sql, cnxn)
+    df = pd.read_sql(sql, cnxn)
+    cnxn.dispose()
+    return df
 
 
 def sqldate_to_datetime(column):
@@ -92,22 +102,18 @@ def apply_cascade(result_sum):
     return df
 
 
-def realperiod_10mins(last_df):
+def realperiod_10mins(last_df, type="1-0"):
 
     last_df["TimeOnRound"] = last_df["NewTimeOn"].dt.ceil("10min")
     last_df["TimeOffRound"] = last_df["TimeOff"].dt.ceil("10min")
     last_df["TimeStamp"] = last_df.apply(
-        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"),
-        axis=1,
+        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"), axis=1,
     )
     last_df = last_df.explode("TimeStamp")
-
-    last_df["RealPeriod"] = pd.Timedelta(0)
-    last_df["Period Siemens(s)"] = pd.Timedelta(0)
-    last_df["Period Tarec(s)"] = pd.Timedelta(0)
-
-    mask_siemens = last_df["Error Type"] == 1
-    mask_tarec = last_df["Error Type"] == 0
+    if type != "2006":
+        last_df["RealPeriod"] = pd.Timedelta(0)
+        last_df["Period Siemens(s)"] = pd.Timedelta(0)
+        last_df["Period Tarec(s)"] = pd.Timedelta(0)
 
     df_TimeOn = last_df[["TimeStamp", "NewTimeOn"]].copy()
     df_TimeOff = last_df[["TimeStamp", "TimeOff"]].copy()
@@ -120,8 +126,11 @@ def realperiod_10mins(last_df):
 
     last_df["RealPeriod"] = last_df["10minTimeOff"] - last_df["10minTimeOn"]
 
-    last_df.loc[mask_siemens, "Period Siemens(s)"] = last_df.loc[mask_siemens, "RealPeriod"]
-    last_df.loc[mask_tarec, "Period Tarec(s)"] = last_df.loc[mask_tarec, "RealPeriod"]
+    if type != "2006":
+        mask_siemens = last_df["Error Type"] == 1
+        mask_tarec = last_df["Error Type"] == 0
+        last_df.loc[mask_siemens, "Period Siemens(s)"] = last_df.loc[mask_siemens, "RealPeriod"]
+        last_df.loc[mask_tarec, "Period Tarec(s)"] = last_df.loc[mask_tarec, "RealPeriod"]
 
     return last_df
 
@@ -238,6 +247,34 @@ def ep_cf(x):
 def cf_column(x):
     M = len(x)
     return CF(M)
+
+
+def Epot_case_2(df):
+    CB2 = pd.read_excel("CB2.xlsx")
+    CB2 = CB2.astype(int).drop_duplicates()
+    CB2_interp = interp1d(CB2.Wind, CB2.Power, kind="linear", fill_value="extrapolate")
+
+    Epot = df.apply(lambda x: float(CB2_interp(x.wtc_AcWindSp_mean)), axis=1).values / 6
+
+    return Epot
+
+
+def Epot_case_3(period):
+    NWD = pd.read_excel("NWD.xlsx", index_col=0)
+    SWF = pd.read_excel("SWF.xlsx", index_col=0)
+    CB2 = pd.read_excel("CB2.xlsx")
+    PWE = 0.92
+    NAE = 0
+    CB2 = CB2.astype(int).drop_duplicates()
+    CB2_interp = interp1d(CB2.Wind, CB2.Power, kind="linear", fill_value="extrapolate")
+
+    bins_v = np.arange(1, 26, 1)
+    for v in bins_v:
+        NAE += CB2_interp(v) * NWD.loc[v].values[0]
+
+    NAE *= PWE
+    Epot = NAE * (1 / 8760) * (1 / 6) * SWF.loc[period].values[0]
+    return Epot
 
 
 def outer_fill(df, period):
@@ -899,7 +936,7 @@ def full_calculation(period):
     )
 
     if not alarms_df_2006.empty:
-        alarms_df_2006_10min = realperiod_10mins(alarms_df_2006)
+        alarms_df_2006_10min = realperiod_10mins(alarms_df_2006, "2006")
 
         alarms_df_2006_10min = alarms_df_2006_10min.groupby("TimeStamp").agg(
             {"RealPeriod": "sum", "StationNr": "first"}
@@ -1006,9 +1043,9 @@ def full_calculation(period):
         )
     )
 
-    alarms_binned["Period 0(s)"] = alarms_binned["Period 0(s)"].dt.total_seconds()
-    alarms_binned["Period 1(s)"] = alarms_binned["Period 1(s)"].dt.total_seconds()
-    alarms_binned["RealPeriod"] = alarms_binned["RealPeriod"].dt.total_seconds()
+    alarms_binned["Period 0(s)"] = alarms_binned["Period 0(s)"].dt.total_seconds().fillna(0)
+    alarms_binned["Period 1(s)"] = alarms_binned["Period 1(s)"].dt.total_seconds().fillna(0)
+    alarms_binned["RealPeriod"] = alarms_binned["RealPeriod"].dt.total_seconds().fillna(0)
 
     alarms_binned.drop(
         alarms_binned.loc[alarms_binned["TimeStamp"] == period_start].index, inplace=True
@@ -1112,7 +1149,16 @@ def full_calculation(period):
 
     cnt_115_final = cnt_115_final.sort_values(["StationId", "TimeStamp"]).reset_index(drop=True)
 
-    cnt_115_final["EL"] = cnt_115_final["Epot"] - cnt_115_final["wtc_kWG1TotE_accum"]
+    # mask_Epot_case_2 = cnt_115_final["Epot"].isna()
+
+    # Epot_case_2_var = Epot_case_2(cnt_115_final.loc[mask_Epot_case_2])
+
+    # cnt_115_final.loc[mask_Epot_case_2, "Epot"] = np.maximum(
+    #     Epot_case_2_var, cnt_115_final.loc[mask_Epot_case_2, "wtc_kWG1TotE_accum"].values
+    # )
+    cnt_115_final["EL"] = cnt_115_final["Epot"].fillna(0) - cnt_115_final[
+        "wtc_kWG1TotE_accum"
+    ].fillna(0)
 
     cnt_115_final["EL"] = cnt_115_final["EL"].clip(lower=0)
 
@@ -1312,4 +1358,4 @@ def full_calculation(period):
 
 if __name__ == "__main__":
 
-    full_calculation("2022-04")
+    full_calculation("2022-07")
