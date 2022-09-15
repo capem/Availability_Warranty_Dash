@@ -30,9 +30,7 @@ commit_hash = get_git_revision_hash()
 
 temp_upload_directory = r"./monthly_data/uploads/temp/"
 
-temp_upload_directory_abs = (
-    os.path.abspath(temp_upload_directory).replace("\\", "/") + "/"
-)
+temp_upload_directory_abs = os.path.abspath(temp_upload_directory).replace("\\", "/") + "/"
 
 du.configure_upload(app, temp_upload_directory, use_upload_id=False)
 # cache = Cache(app.server, config={
@@ -44,8 +42,8 @@ du.configure_upload(app, temp_upload_directory, use_upload_id=False)
 upload_directory = "./monthly_data/uploads/"
 
 
-def get_all_periods():
-    all_periods = sorted(
+def get_alls():
+    alls = sorted(
         set(
             [
                 name[:7]
@@ -57,10 +55,10 @@ def get_all_periods():
         reverse=True,
     )
 
-    return all_periods
+    return alls
 
 
-directories = get_all_periods()
+directories = get_alls()
 
 column_style = {
     "height": "60vh",
@@ -95,11 +93,7 @@ layout = html.Div(
                             id="date_picker",
                             clearable=False,
                             display_format="YYYY-MM",
-                            style={
-                                "margin": 15,
-                                "position": "static",
-                                "placeSelf": "center",
-                            },
+                            style={"margin": 15, "position": "static", "placeSelf": "center",},
                             persistence=True,
                             number_of_months_shown=1,
                             show_outside_days=False,
@@ -123,11 +117,7 @@ layout = html.Div(
                 dbc.Col(
                     [
                         html.P(
-                            [
-                                "After Uploading Files",
-                                html.Br(),
-                                "Select a month to Calculate",
-                            ],
+                            ["After Uploading Files", html.Br(), "Select a month to Calculate",],
                             style={"placeSelf": "end center"},
                         ),
                         html.Div(  # wrapped because of styling problmes in dropdown
@@ -166,10 +156,7 @@ def file_download(filename):
 
 
 @app.callback(
-    [
-        Output("file-list", "children"),
-        Output("calculation_selection_dropdown", "options"),
-    ],
+    [Output("file-list", "children"), Output("calculation_selection_dropdown", "options"),],
     [Input("date_picker", "date"), Input("dash_uploader", "isCompleted")],
     [State("dash_uploader", "fileNames")],
 )
@@ -218,9 +205,7 @@ def update_output(date, isCompleted, fileNames):
             # if not os.path.exists(move_to_directory):
             #     os.makedirs(move_to_directory)
 
-            os.renames(
-                temp_upload_directory + fileNames[0], move_to_directory + fileNames[0]
-            )
+            os.renames(temp_upload_directory + fileNames[0], move_to_directory + fileNames[0])
 
             print(fileNames)
             print(fileNames[0][:7])
@@ -228,7 +213,7 @@ def update_output(date, isCompleted, fileNames):
     if isCompleted:
         move_uploaded_file(fileNames)
 
-    directories = get_all_periods()
+    directories = get_alls()
 
     files = uploaded_files()
 
@@ -244,9 +229,7 @@ def update_output(date, isCompleted, fileNames):
         )
 
 
-@app.callback(
-    Output("MAA", "children"), [Input("calculation_selection_dropdown", "value")]
-)
+@app.callback(Output("MAA", "children"), [Input("calculation_selection_dropdown", "value")])
 # @cache.memoize(timeout=60)
 def callback_calcul(value):
 
@@ -305,14 +288,20 @@ def callback_calcul(value):
     ELX = Results_grouped["ELX"]
     ELNX = Results_grouped["ELNX"]
     EL_2006 = Results_grouped["EL_2006"]
+    EL_PowerRed = Results_grouped["EL_PowerRed"]
+    EL_Misassigned = Results_grouped["EL_Misassigned"]
+
+    ELX_eq = ELX - EL_Misassigned
+    ELNX_eq = ELNX + EL_2006 + EL_PowerRed + EL_Misassigned
+    Epot_eq = Ep + ELX_eq + ELNX_eq
 
     EL_wind = Results_grouped["EL_wind"]
     EL_wind_start = Results_grouped["EL_wind_start"]
     EL_alarm_start = Results_grouped["EL_alarm_start"]
 
-    Results_grouped["MAA"] = 100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006)
+    Results_grouped["MAA_brut"] = 100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006 + EL_PowerRed)
 
-    Results_grouped["MAA_indefini"] = 100 * (Ep + ELX) / (Ep + EL)
+    Results_grouped["MAA_brut_mis"] = round(100 * (Ep + ELX_eq) / (Epot_eq), 2,)
 
     Results_grouped["MAA_indefni_adjusted"] = (
         100 * (Ep + ELX) / (Ep + EL - (EL_wind + EL_wind_start + EL_alarm_start))
