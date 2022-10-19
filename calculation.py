@@ -1,22 +1,21 @@
-from operator import index
-from dateutil.relativedelta import relativedelta
-from datetime import datetime as dt
-from pandas.core.indexing import is_nested_tuple
-import pyodbc
-from zipfile import ZipFile
-import os
-import numpy as np
 import multiprocessing as mp
-import pandas as pd
+import os
 import urllib
-from sqlalchemy import create_engine
+from datetime import datetime as dt
+from operator import index
+from zipfile import ZipFile
 
-from scipy.stats import binned_statistic
-
+import numpy as np
+import pandas as pd
 # import matplotlib.pyplot as plt
-from scipy.integrate import quad
+from dateutil.relativedelta import relativedelta
+# import pyodbc
+from pandas.core.indexing import is_nested_tuple
 from scipy import integrate
+from scipy.integrate import quad
 from scipy.interpolate import interp1d
+from scipy.stats import binned_statistic
+from sqlalchemy import create_engine
 
 
 def zip_to_df(data_type, sql, period):

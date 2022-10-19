@@ -1,23 +1,20 @@
-import dash_bootstrap_components as dbc
-
-from dash import dcc
-from dash import html
-
-from dash.dependencies import Input, Output
-import dash.dash_table as dash_table
-
-import pandas as pd
 import os
-
+from calendar import monthrange
 # import datetime
 from urllib.parse import quote as urlquote
 
+import dash.dash_table as dash_table
+import dash_bootstrap_components as dbc
+from dash import dcc, html
+from dash.dependencies import Input, Output
+
+import pandas as pd
+
+from app import app, navbar
+
 # from dash.exceptions import PreventUpdate
 
-from app import navbar
-from app import app
 
-from calendar import monthrange
 
 # from flask_caching import Cache
 # from dash.dash import no_update

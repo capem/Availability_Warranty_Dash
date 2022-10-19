@@ -1,26 +1,22 @@
+import base64
+import os
+import re
+import subprocess
+from datetime import datetime as dt
+from urllib.parse import quote as urlquote
+
 import dash_bootstrap_components as dbc
-from dash import dcc
-from dash import html
+import dash_uploader as du
+from dash import dcc, html
+from dash.dash import no_update
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-from dash.dash import no_update
-import re
+
+import calculation as calculation
+from app import app
+from app import navbar as navbar
 
 # from flask_caching import Cache
-
-import os
-from urllib.parse import quote as urlquote
-import base64
-from datetime import datetime as dt
-
-
-from app import navbar as navbar
-from app import app
-import calculation as calculation
-
-import dash_uploader as du
-import subprocess
-
 
 def get_git_revision_hash() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
