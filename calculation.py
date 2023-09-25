@@ -7,8 +7,10 @@ from zipfile import ZipFile
 
 import numpy as np
 import pandas as pd
+
 # import matplotlib.pyplot as plt
 from dateutil.relativedelta import relativedelta
+
 # import pyodbc
 from pandas.core.indexing import is_nested_tuple
 from scipy import integrate
@@ -19,7 +21,6 @@ from sqlalchemy import create_engine
 
 
 def zip_to_df(data_type, sql, period):
-
     file_name = f"{period}-{data_type.lower()}"
 
     data_type_path = f"./monthly_data/uploads/{data_type.upper()}/"
@@ -39,7 +40,6 @@ def zip_to_df(data_type, sql, period):
 
 
 def sqldate_to_datetime(column):
-
     try:
         column = column.str.replace(",", ".").astype(float)
     except:
@@ -57,7 +57,6 @@ def sqldate_to_datetime(column):
 
 # Determine alarms real periods
 def cascade(df):
-
     df.reset_index(inplace=True, drop=True)
     df["TimeOffMax"] = df.TimeOff.cummax().shift()
 
@@ -68,7 +67,6 @@ def cascade(df):
 
 # looping through turbines and applying cascade method
 def apply_cascade(result_sum):
-
     # Sort by alarm ID
     result_sum.sort_values(["TimeOn", "ID"], inplace=True)
     df = result_sum.groupby("StationNr").apply(cascade)
@@ -102,11 +100,11 @@ def apply_cascade(result_sum):
 
 
 def realperiod_10mins(last_df, type="1-0"):
-
     last_df["TimeOnRound"] = last_df["NewTimeOn"].dt.ceil("10min")
     last_df["TimeOffRound"] = last_df["TimeOff"].dt.ceil("10min")
     last_df["TimeStamp"] = last_df.apply(
-        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"), axis=1,
+        lambda row: pd.date_range(row["TimeOnRound"], row["TimeOffRound"], freq="10min"),
+        axis=1,
     )
     last_df = last_df.explode("TimeStamp")
     if type != "2006":
@@ -135,7 +133,6 @@ def realperiod_10mins(last_df, type="1-0"):
 
 
 def remove_1005_overlap(df):  # input => alarmsresultssum
-
     df = df[
         [
             "TimeOn",
@@ -148,7 +145,6 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
             "OldTimeOn",
             "OldTimeOff",
             "UK Text",
-            "Type Selected",
             "Error Type",
             "RealPeriod",
         ]
@@ -162,7 +158,6 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
     df["TimeOn"] = df["NewTimeOn"]
 
     for _, j in df_1005.iterrows():
-
         overlap_end = (
             (df["TimeOn"] <= j["TimeOn"])
             & (df["TimeOn"] <= j["TimeOff"])
@@ -220,7 +215,6 @@ def remove_1005_overlap(df):  # input => alarmsresultssum
 
 
 def full_range(df, full_range_var):
-
     new_df = pd.DataFrame(index=full_range_var)
 
     df = df.set_index("TimeStamp")
@@ -283,6 +277,8 @@ def outer_fill(df, period):
     period_dt_lower = period_dt + relativedelta(months=-1)
     period_lower = period_dt_lower.strftime("%Y-%m")
 
+    df["Was Missing"] = ""
+
     if df["Parameter"].iat[0] in {"Resumed", "Resumed;Resumed"}:
         first_row = pd.DataFrame(
             {
@@ -309,12 +305,10 @@ def outer_fill(df, period):
 
 
 def inner_fill(df, name, alarms_result_sum):
-
     for j in df.index[:-1]:
         if (df["Parameter"].iat[j] in {"Stopped", "Stopped;Stopped"}) & (
             df["Parameter"].iat[j + 1] in {"Stopped", "Stopped;Stopped"}
         ):
-
             result_turbine = alarms_result_sum.loc[(alarms_result_sum.StationNr == name)].copy()
 
             TimeOn = result_turbine.loc[
@@ -340,7 +334,6 @@ def inner_fill(df, name, alarms_result_sum):
         elif (df["Parameter"].iat[j] in {"Resumed", "Resumed;Resumed"}) & (
             df["Parameter"].iat[j + 1] in {"Resumed", "Resumed;Resumed"}
         ):
-
             TimeOn = alarms_result_sum.loc[
                 (alarms_result_sum.StationNr == name)
                 & (alarms_result_sum.TimeOff < df["TimeOn"].iat[j + 1])
@@ -372,7 +365,6 @@ def inner_fill(df, name, alarms_result_sum):
 
 
 def fill_115_apply(df, period, name, alarms_result_sum):
-
     df = df.reset_index(drop=True)
 
     df = outer_fill(df, period)
@@ -385,14 +377,12 @@ def fill_115_apply(df, period, name, alarms_result_sum):
 
 
 def fill_115(alarms, period, alarms_result_sum):
-
     path = "./monthly_data/115/"
 
     # load adjusted 115 alamrs if already filled and adjusted
     if (os.path.isfile(path + f"{period}-115-missing.xlsx")) and (
         os.path.isfile(path + f"{period}-115.xlsx")
     ):
-
         missing_115 = pd.read_excel(path + f"{period}-115-missing.xlsx")
         alarms_115_filled_rows = pd.read_excel(path + f"{period}-115.xlsx")
 
@@ -448,6 +438,8 @@ def outer_fill_20(df, period):
     period_dt_lower = period_dt + relativedelta(months=-1)
     period_lower = period_dt_lower.strftime("%Y-%m")
 
+    df["Was Missing"] = ""
+
     if df["Parameter"].iat[0] == "Resumed":
         first_row = pd.DataFrame(
             {
@@ -474,10 +466,8 @@ def outer_fill_20(df, period):
 
 
 def inner_fill_20(df, name, alarms_result_sum):
-
     for j in df.index[:-1]:
         if (df["Parameter"].iat[j] == "Stopped") & (df["Parameter"].iat[j + 1] == "Stopped"):
-
             result_turbine = alarms_result_sum.loc[(alarms_result_sum.StationNr == name)].copy()
 
             TimeOn = result_turbine.loc[
@@ -498,7 +488,6 @@ def inner_fill_20(df, name, alarms_result_sum):
             df = df.sort_index().reset_index(drop=True)
 
         elif (df["Parameter"].iat[j] == "Resumed") & (df["Parameter"].iat[j + 1] == "Resumed"):
-
             TimeOn = alarms_result_sum.loc[
                 (alarms_result_sum.StationNr == name)
                 & (alarms_result_sum.TimeOff < df["TimeOn"].iat[j + 1])
@@ -527,7 +516,6 @@ def inner_fill_20(df, name, alarms_result_sum):
 
 
 def fill_20_apply(df, period, name, alarms_result_sum):
-
     df = df.reset_index(drop=True)
 
     df = outer_fill_20(df, period)
@@ -540,14 +528,12 @@ def fill_20_apply(df, period, name, alarms_result_sum):
 
 
 def fill_20(alarms, period, alarms_result_sum):
-
     path = "./monthly_data/20/"
 
     # load adjusted 20 alamrs
     if (os.path.isfile(path + f"{period}-20-missing.xlsx")) and (
         os.path.isfile(path + f"{period}-20.xlsx")
     ):
-
         missing_20 = pd.read_excel(path + f"{period}-cut-missing.xlsx")
         alarms_20_filled_rows = pd.read_excel(path + f"{period}-cut.xlsx")
 
@@ -599,7 +585,6 @@ def fill_20(alarms, period, alarms_result_sum):
 
 
 def upsample_115_20(df_group, period, alarmcode):
-
     StationId, df = df_group
     df = df.loc[:, ["TimeOn"]]
 
@@ -638,7 +623,6 @@ def upsample_115_20(df_group, period, alarmcode):
 
 
 class read_files:
-
     # ------------------------------grd-------------------------------------
     @staticmethod
     def read_grd(period):
@@ -656,7 +640,7 @@ class read_files:
     @staticmethod
     def read_cnt(period):
         usecols_cnt = """TimeStamp, StationId, wtc_kWG1Tot_accum,
-        wtc_kWG1TotE_accum"""
+        wtc_kWG1TotE_accum, wtc_kWG1TotI_accum"""
 
         sql_cnt = f"Select {usecols_cnt} FROM tblSCTurCount;"
 
@@ -718,7 +702,6 @@ class read_files:
     # ------------------------------met---------------------------
     @staticmethod
     def read_met(period):
-
         usecols_met = """TimeStamp, StationId ,met_WindSpeedRot_mean,
         met_WinddirectionRot_mean"""
 
@@ -752,7 +735,6 @@ class read_files:
 
     @staticmethod
     def read_all(period):
-
         return (
             read_files.read_met(period),
             read_files.read_tur(period),
@@ -764,7 +746,6 @@ class read_files:
 
 
 def full_calculation(period):
-
     # reading all files with function
     met, tur, alarms, cnt, grd, din = read_files.read_all(period)
 
@@ -832,7 +813,7 @@ def full_calculation(period):
     din = din.loc[din.index.isin(sanity_din)]
 
     # --------------------------error list-------------------------
-    error_list = pd.read_excel(r"Error_Type_List_Las_Update_151209.xlsx")
+    error_list = pd.read_excel(r"Alarmes List Norme RDS-PP_Tarec.xlsx")
 
     error_list.Number = error_list.Number.astype(int)  # ,errors='ignore'
 
@@ -935,6 +916,7 @@ def full_calculation(period):
     )
 
     if not alarms_df_2006.empty:
+        alarms_df_2006["TimeOff"] = alarms_df_2006["TimeOff"].fillna(period_end)
         alarms_df_2006_10min = realperiod_10mins(alarms_df_2006, "2006")
 
         alarms_df_2006_10min = alarms_df_2006_10min.groupby("TimeStamp").agg(
@@ -953,7 +935,7 @@ def full_calculation(period):
 
     else:
         print("no 2006")
-        alarms_df_2006_10min = pd.DataFrame(columns={"TimeStamp", "Duration 2006(s)", "StationId"})
+        alarms_df_2006_10min = pd.DataFrame(columns=["TimeStamp", "Duration 2006(s)", "StationId"])
     # ------------------115 filling binning -----------------------------------
 
     print("filling 115")
@@ -1098,11 +1080,8 @@ def full_calculation(period):
     # -------- operational turbines mask --------------------------------------
     mask_n = (
         (cnt_115["wtc_kWG1TotE_accum"] > 0)
-        & (cnt_115["Period 0(s)"] == 0)
-        & (cnt_115["Period 1(s)"] == 0)
+        & (cnt_115["RealPeriod"] == 0)
         & (cnt_115["wtc_ActPower_min"] > 0)
-        & ((cnt_115["Duration 115(s)"] == 0) | (cnt_115["wtc_ActPower_min"] > 0))
-        & ((cnt_115["Duration 20-25(s)"] == 0) | (cnt_115["wtc_ActPower_min"] > 0))
         & (cnt_115["Duration 2006(s)"] == 0)
         & (cnt_115["wtc_PowerRed_timeon"] == 0)
     )
@@ -1148,13 +1127,13 @@ def full_calculation(period):
 
     cnt_115_final = cnt_115_final.sort_values(["StationId", "TimeStamp"]).reset_index(drop=True)
 
-    # mask_Epot_case_2 = cnt_115_final["Epot"].isna()
+    mask_Epot_case_2 = cnt_115_final["Epot"].isna()
 
-    # Epot_case_2_var = Epot_case_2(cnt_115_final.loc[mask_Epot_case_2])
+    Epot_case_2_var = Epot_case_2(cnt_115_final.loc[mask_Epot_case_2])
 
-    # cnt_115_final.loc[mask_Epot_case_2, "Epot"] = np.maximum(
-    #     Epot_case_2_var, cnt_115_final.loc[mask_Epot_case_2, "wtc_kWG1TotE_accum"].values
-    # )
+    cnt_115_final.loc[mask_Epot_case_2, "Epot"] = np.maximum(
+        Epot_case_2_var, cnt_115_final.loc[mask_Epot_case_2, "wtc_kWG1TotE_accum"].values
+    )
     cnt_115_final["EL"] = cnt_115_final["Epot"].fillna(0) - cnt_115_final[
         "wtc_kWG1TotE_accum"
     ].fillna(0)
@@ -1260,7 +1239,6 @@ def full_calculation(period):
     # -------------------------------------------------------------------------
 
     def lowind(df):
-
         etape1 = (
             (df.DiffV1 > 1)
             & (df.DiffV2 > 1)
@@ -1289,11 +1267,7 @@ def full_calculation(period):
         df.loc[mask_2 & ~mask_1, "Duration lowind_start(s)"] = 600
         # ---------------------------------------------------------------------
 
-        mask_3 = (
-            (df["Duration 115(s)"] > 0).shift()
-            & (df["EL_indefini"] > 0)
-            & (df["Duration 115(s)"] == 0)
-        )
+        mask_3 = (df["RealPeriod"] > 0).shift() & (df["EL_indefini"] > 0) & (df["RealPeriod"] == 0)
 
         df.loc[~mask_1 & ~mask_2 & mask_3, "EL_alarm_start"] = (
             df.loc[~mask_1 & ~mask_2 & mask_3, "EL_indefini"]
@@ -1324,15 +1298,10 @@ def full_calculation(period):
     # # #----end bypass
 
     # ---------Misassigned low wind---------------
-    EL_Misassigned_mask = (
-        cnt_115_final["UK Text"].str.contains("low wind")
-        & (cnt_115_final["DiffV1"] > 1)
-        & (cnt_115_final["DiffV2"] > 1)
-        & (
-            (cnt_115_final["prev_AcWindSp"] >= 5)
-            | (cnt_115_final["next_AcWindSp"] >= 5)
-            | (cnt_115_final["wtc_AcWindSp_mean"] >= 5)
-        )
+    EL_Misassigned_mask = cnt_115_final["UK Text"].str.contains("low wind") & (
+        ((cnt_115_final["next_ActPower_min"] > 0) & (cnt_115_final["prev_ActPower_min"] > 0))
+        | ((cnt_115_final["next_ActPower_min"] > 0) & (cnt_115_final["prev_Alarme"] > 0))
+        | ((cnt_115_final["prev_ActPower_min"] > 0) & (cnt_115_final["next_Alarme"] > 0))
     )
 
     cnt_115_final.loc[EL_Misassigned_mask, "EL_Misassigned"] = cnt_115_final.loc[
@@ -1356,5 +1325,4 @@ def full_calculation(period):
 
 
 if __name__ == "__main__":
-
-    full_calculation("2022-07")
+    full_calculation("2023-01")

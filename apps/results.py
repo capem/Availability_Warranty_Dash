@@ -1,72 +1,59 @@
 import os
 from calendar import monthrange
+
 # import datetime
+from urllib.parse import quote as urlquote
+import os
+from calendar import monthrange
 from urllib.parse import quote as urlquote
 
 import dash.dash_table as dash_table
 import dash_bootstrap_components as dbc
+import pandas as pd
 from dash import dcc, html
 from dash.dependencies import Input, Output
 
-import pandas as pd
-
 from app import app, navbar
 
-# from dash.exceptions import PreventUpdate
+
+def get_directories_results(path):
+    return [
+        {"label": file[:-4], "value": file[:-4]}
+        for file in os.listdir(path)
+        if os.path.isfile(os.path.join(path, file))
+        and file.endswith(".csv")
+        and file != ".gitkeep"
+    ]
 
 
-
-# from flask_caching import Cache
-# from dash.dash import no_update
-
-# cache = Cache(app.server, config={
-#    # try 'filesystem' if you don't want to setup redis
-#    'CACHE_TYPE': 'redis',
-#    'CACHE_REDIS_URL': os.environ.get('REDIS_URL', '')
-# })
+def generate_card(content_list):
+    return dbc.Card(dbc.CardBody(content_list), className="mt-3")
 
 
-def directories_results():
-
-    directories_results = [a for a in os.listdir("./monthly_data/results/") if a != ".gitkeep"]
-    return [{"label": i, "value": i} for i in directories_results]
-
-
-# tab_style = {'width': '45vw', 'height': '60%'}
-
-tab1_content = dbc.Card(
-    dbc.CardBody(
-        [
-            html.P(id="MAA_brut", className="card-text"),
-            html.P(id="wtc_kWG1TotE_accum", className="card-text"),
-            html.P(id="EL115", className="card-text"),
-            html.P(id="ELX", className="card-text"),
-            html.P(id="ELNX", className="card-text"),
-            html.P(id="EL_indefini_left", className="card-text"),
-            html.P(id="Epot_eq", className="card-text"),
-            html.P(id="EL_Misassigned", className="card-text"),
-            html.P(id="EL_PowerRed", className="card-text"),
-            html.P(id="ELX%", className="card-text"),
-            html.P(id="ELNX%", className="card-text"),
-            # dbc.Button("Don't click here", color="danger"),
+tab1_content = generate_card(
+    [
+        html.P(id=f"{id}", className="card-text")
+        for id in [
+            "MAA_brut",
+            "wtc_kWG1TotE_accum",
+            "EL115",
+            "ELX",
+            "ELNX",
+            "EL_indefini_left",
+            "Epot_eq",
+            "EL_Misassigned",
+            "EL_PowerRed",
+            "ELX%",
+            "ELNX%",
         ]
-    ),
-    className="mt-3",
-    # style=tab_style
+    ]
 )
 
-tab2_content = dbc.Card(
-    dbc.CardBody(
-        [
-            html.P(id="Total_duration", className="card-text"),
-            html.P(id="Siemens_duration", className="card-text"),
-            html.P(id="Tarec_duration", className="card-text"),
-            html.P(id="duration_115", className="card-text"),
-            # dbc.Button("Click here", color="success"),
-        ]
-    ),
-    className="mt-3",
-    # style=tab_style
+tab2_content = generate_card(
+    [
+        html.P(id=f"{id}", className="card-text")
+        for id in ["Total_duration", "Siemens_duration", "Tarec_duration", "duration_115"]
+    ]
 )
 
 tabs = dbc.Tabs(
@@ -75,7 +62,6 @@ tabs = dbc.Tabs(
         dbc.Tab(tab2_content, label="Time Based Availability"),
     ]
 )
-
 
 layout = html.Div(
     [
@@ -92,7 +78,7 @@ layout = html.Div(
                         "margin": "0 auto",
                         "marginBottom": 10,
                     },
-                    options=directories_results(),
+                    options=get_directories_results("./monthly_data/results/"),
                 ),
                 html.A(
                     "Download Detailed results",
@@ -135,14 +121,8 @@ layout = html.Div(
 @app.callback(
     Output("month_selection_dropdown", "options"), [Input("update_dropdown", "n_clicks")]
 )
-def update_dropdown(x):
-    path = "./monthly_data/results/"
-    directories_results = [
-        a
-        for a in os.listdir(path)
-        if (os.path.isfile(os.path.join(path, a)) and a != ".gitkeep" and a.endswith(".csv"))
-    ]
-    return [{"label": i[:-4], "value": i[:-4]} for i in directories_results]
+def update_dropdown(n_clicks):
+    return get_directories_results("./monthly_data/results/")
 
 
 @app.callback(
@@ -168,14 +148,13 @@ def update_dropdown(x):
 )
 # @cache.memoize(timeout=60)
 def callback_a(x):
-
     # Danger !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     if x is None:
         return tuple(None for i in range(16))
 
     results = round(
         pd.read_csv(
-            f"./monthly_data/results/Grouped_Results/grouped_{x}.csv", decimal=",", sep=";"
+            f"./monthly_data/results/Grouped_Results/grouped_{x}.csv", decimal=".", sep=","
         ),
         2,
     )
@@ -199,13 +178,19 @@ def callback_a(x):
     EL_wind_start = results["EL_wind_start"].sum()
     EL_alarm_start = results["EL_alarm_start"].sum()
 
-    MAA_brut = round(100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006 + EL_PowerRed), 2,)
+    MAA_brut = round(
+        100 * (Ep + ELX) / (Ep + ELX + ELNX + EL_2006 + EL_PowerRed),
+        2,
+    )
 
-    MAA_brut_mis = round(100 * (Ep + ELX_eq) / (Epot_eq), 2,)
+    MAA_brut_mis = round(
+        100 * (Ep + ELX_eq) / (Epot_eq),
+        2,
+    )
 
     Tarec_duration = round(results["Period 1(s)"].sum() / 3600, 2)
     Siemens_duration = round(results["Period 0(s)"].sum() / 3600, 2)
-    Total_duration = Tarec_duration +  Siemens_duration
+    Total_duration = Tarec_duration + Siemens_duration
 
     year = int(x[:4])
     month = int(x[5:7])
@@ -257,4 +242,3 @@ def callback_a(x):
         location_grouped,
         table,
     )
-

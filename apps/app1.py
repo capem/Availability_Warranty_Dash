@@ -243,8 +243,8 @@ def callback_calcul(value):
 
     Results.to_csv(
         f"./monthly_data/results/{value}-Availability.csv",
-        decimal=",",
-        sep=";",
+        decimal=".",
+        sep=",",
         index=False,
         mode="a",
     )
@@ -307,8 +307,8 @@ def callback_calcul(value):
 
     Results_grouped.to_csv(
         f"./monthly_data/results/Grouped_Results/grouped_{value}-Availability.csv",
-        decimal=",",
-        sep=";",
+        decimal=".",
+        sep=",",
     )
     print("Done")
 
