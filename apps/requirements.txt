@@ -17,7 +17,7 @@ calculation == 8.0
 # index_page.py: 4
 # results.py: 4,9
 # test_store_json.py: 5,6
-dash == 1.9.0
+dash == 2.15.0
 
 # app1.py: 1
 # index_page.py: 1
