@@ -28,7 +28,7 @@ dash_bootstrap_components == 0.8.3
 # index_page.py: 2
 # results.py: 3
 # test_store_json.py: 4
-dash_core_components == 1.8.0
+dash_core_components == 2.0.0
 
 # app1.py: 3
 # index_page.py: 3
