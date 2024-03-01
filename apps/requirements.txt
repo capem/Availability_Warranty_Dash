@@ -34,7 +34,7 @@ dash_core_components == 1.8.0
 # index_page.py: 3
 # results.py: 2
 # test_store_json.py: 3
-dash_html_components == 1.0.2
+dash_html_components == 2.0.0
 
 # app1.py: 6
 # results.py: 5
